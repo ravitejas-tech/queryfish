@@ -1,8 +1,7 @@
-# Commit convention
+# Commit messages
 
-QueryFish uses [Conventional Commits](https://www.conventionalcommits.org/).
-Commit messages are read far more often than they are written — usually by
-someone bisecting a regression at an inconvenient hour.
+QueryFish uses [Conventional Commits](https://www.conventionalcommits.org/). Commit messages get read a lot more often
+than they get written, usually by someone trying to track down a regression.
 
 ## Format
 
@@ -42,47 +41,44 @@ Fixes #42
 | `ci`       | CI configuration                       | none           |
 | `chore`    | Anything else (tooling, housekeeping)  | none           |
 
-Version impact is a guide, not automation — the changeset decides the release.
-See [versioning.md](./versioning.md).
+The version impact column is a guide. The changeset is what actually decides the release. See
+[versioning.md](./versioning.md).
 
 ## Scopes
 
-Scopes match the pipeline stages, so a reader can tell which stage changed
-without opening the diff:
+Scopes match the pipeline stages, so you can tell which part changed without opening the diff:
 
-| Scope     | Covers                                              |
-| --------- | --------------------------------------------------- |
-| `loader`  | `src/loader/` — spec loading, bundling, spec errors |
-| `ir`      | `src/ir/` — the IR, schema conversion, naming       |
-| `emit`    | `src/emit/` — all emitters                          |
-| `cli`     | `src/cli/` — commands, flags, output, watch         |
-| `config`  | `src/config/` — config loading, `defineConfig`      |
-| `example` | `examples/`                                         |
-| `adr`     | `docs/adr/`                                         |
+| Scope     | Covers                                             |
+| --------- | -------------------------------------------------- |
+| `loader`  | `src/loader/`: spec loading, bundling, spec errors |
+| `ir`      | `src/ir/`: the IR, schema conversion, naming       |
+| `emit`    | `src/emit/`: all emitters                          |
+| `cli`     | `src/cli/`: commands, flags, output, watch         |
+| `config`  | `src/config/`: config loading, `defineConfig`      |
+| `example` | `examples/`                                        |
+| `adr`     | `docs/adr/`                                        |
+| `website` | `website/`                                         |
 
-Omit the scope when a change genuinely spans the codebase. Don't invent scopes
-for one commit.
+Leave the scope out if a change really does touch everything. Don't make up a new scope for a single commit.
 
 ## Subject line
 
-- Imperative mood: "add", not "added" or "adds". It completes the sentence
-  _"If applied, this commit will …"_.
-- No capital letter at the start, no trailing period.
-- Under 72 characters.
-- Say what changed, not which files. `fix(emit): quote invalid property names`
-  beats `fix(emit): update types.ts`.
+- Use the imperative: "add", not "added" or "adds". It should finish the sentence "If applied, this commit will ...".
+- Lowercase first letter, no full stop at the end.
+- Keep it under 72 characters.
+- Describe the change, not the files. `fix(emit): quote invalid property names` is better than
+  `fix(emit): update types.ts`.
 
 ## Body
 
-Optional, but include one whenever the change isn't self-explanatory.
+Optional, but add one whenever the change isn't obvious.
 
-Explain **why**, not what — the diff already shows what. The most valuable body
-answers "why is this the right fix?" or "what breaks without this?".
+Explain why. The diff already shows what. The most useful bodies answer "why is this the right fix?" or "what breaks
+without this?".
 
-Wrap at 80 characters. Separate from the subject with a blank line.
+Wrap at 80 characters, with a blank line after the subject.
 
-If the change implements or changes an architectural decision, reference the
-ADR:
+If the change relates to an architectural decision, mention the ADR:
 
 ```
 See docs/adr/0003-bundle-without-dereferencing.md
@@ -90,8 +86,8 @@ See docs/adr/0003-bundle-without-dereferencing.md
 
 ## Footer
 
-- `Fixes #123` / `Closes #123` to link issues.
-- `Co-Authored-By: Name <email>` for pairing.
+- `Fixes #123` or `Closes #123` to link an issue.
+- `Co-Authored-By: Name <email>` if you paired with someone.
 - Breaking changes:
 
 ```
@@ -102,18 +98,15 @@ Invalidation calls written against the old keys must be updated:
   after:  invalidateQueries({ queryKey: ['pets', '{petId}'] })
 ```
 
-For a code generator, "breaking" usually means **generated output changed in a
-way that breaks user code** — see [versioning.md](./versioning.md) for what
-counts.
+For a code generator, "breaking" usually means **the generated output changed in a way that breaks user code**. See
+[versioning.md](./versioning.md) for what counts.
 
-## Practical guidance
+## A few habits
 
-**One logical change per commit.** If the subject needs "and", it's probably
-two commits.
+**One change per commit.** If the subject needs an "and", it's probably two commits.
 
-**Commit generated fixtures with the change that caused them.** A snapshot
-update belongs in the same commit as the emitter change — split apart, neither
-half makes sense alone.
+**Commit snapshot updates with the change that caused them.** A snapshot change on its own, or an emitter change without
+its snapshot, doesn't make sense to a reviewer.
 
-**Don't commit a broken state to fix it in the next commit.** Every commit on
-`main` should pass CI, so bisect stays useful.
+**Every commit on `main` should pass CI.** Don't commit something broken and fix it in the next commit. It makes
+`git bisect` much less useful.

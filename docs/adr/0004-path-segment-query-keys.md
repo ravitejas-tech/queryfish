@@ -5,33 +5,29 @@
 
 ## Context
 
-Every generated query needs a `queryKey`. The choice is permanent in a way most
-API decisions aren't: the key shape appears in every `invalidateQueries`,
-`setQueryData`, and `getQueryData` call a user writes. Changing it later breaks
-code that QueryFish never generated.
+Every generated query needs a `queryKey`, and once it's picked it's very hard to change. The key shape ends up in every
+`invalidateQueries`, `setQueryData` and `getQueryData` call users write. Changing it later breaks code that QueryFish
+didn't generate.
 
-Two facts shaped the decision.
+Two things shaped the decision.
 
-**react-query-kit appends variables automatically.** A declared key of
-`['pets', '{petId}']` becomes `['pets', '{petId}', { petId: '123' }]` at
-runtime. Cache separation per-variable is handled by the library — it is not a
-reason to prefer one base key over another.
+**react-query-kit adds the variables to the key.** A declared key of `['pets', '{petId}']` becomes
+`['pets', '{petId}', { petId: '123' }]` at runtime. The library already keeps a separate cache entry per set of
+variables, so that isn't a reason to prefer one base key over another.
 
-**Prefix invalidation is the most common cache operation.** After a mutation,
-users almost always want "refetch everything about this resource," which
-TanStack Query expresses as a prefix match:
+**Prefix invalidation is the most common cache operation.** After a mutation, you nearly always want to refetch
+everything about that resource. In TanStack Query that's a prefix match:
 
 ```ts
 queryClient.invalidateQueries({ queryKey: ['pets'] })
 ```
 
-Whether that works at all is decided entirely by the base key.
+Whether that works at all depends entirely on the base key.
 
 ## Decision
 
-The query key is the operation's literal URL path segments
-(`Operation.pathSegments`, rendered by `renderQueryKey` in
-`src/emit/queries.ts`):
+The query key is the operation's URL path, split into segments (`Operation.pathSegments`, rendered by `renderQueryKey`
+in `src/emit/queries.ts`):
 
 | Path                     | Query key                         |
 | ------------------------ | --------------------------------- |
@@ -39,43 +35,35 @@ The query key is the operation's literal URL path segments
 | `/pets/{petId}`          | `['pets', '{petId}']`             |
 | `/owners/{ownerId}/pets` | `['owners', '{ownerId}', 'pets']` |
 
-Path parameters keep their braces. They are structural markers, not values —
-the value arrives in the appended variables object.
+Path parameters keep their braces. They mark the position in the path. The actual value comes from the variables object
+that gets appended.
 
 ## Consequences
 
 ### What this enables
 
-- One call invalidates a whole resource tree: `['pets']` matches `/pets`,
-  `/pets/{petId}`, and anything nested beneath.
-- Keys are predictable from the URL, so users can write invalidation calls
-  without opening the generated file.
-- Related endpoints group naturally in the React Query devtools.
+- One call invalidates a whole resource: `['pets']` matches `/pets`, `/pets/{petId}` and anything below them.
+- You can work out the key from the URL, so you can write invalidation calls without opening the generated file.
+- Related endpoints show up grouped together in the React Query devtools.
 
 ### What this costs
 
-- Two operations on the same path with the same method-kind share a base key.
-  In practice they differ by variables, which are appended, so cache entries
-  stay distinct — but a prefix invalidation intentionally hits both.
-- The literal `'{petId}'` string in a key looks odd on first encounter. It is
-  documented in the README and the example app.
-- Renaming a path in the spec changes every key derived from it. That is
-  correct — it _is_ a different resource — but it will invalidate caches on
-  deploy.
+- Two operations of the same kind on the same path share a base key. They usually differ by variables, which are
+  appended, so the cache entries are still separate. A prefix invalidation will hit both, which is what you want.
+- The literal `'{petId}'` string in a key looks odd the first time you see it. The README and the example app both
+  explain it.
+- Renaming a path in the spec changes every key built from it. That's correct, since it's a different resource now, but
+  it does mean caches get invalidated when you deploy.
 
 ### What we rejected
 
-**`operationId` as the key** (`['getPet']`) — what the original README showed.
-Simple and collision-free, but every endpoint becomes an island: there is no
-prefix relationship between `getPet` and `listPets`, so invalidating "all pets"
-means enumerating every operation by hand and updating that list whenever an
-endpoint is added.
+**`operationId` as the key** (`['getPet']`). This is what the README showed originally. It's simple and never collides,
+but there's no relationship between endpoints: `getPet` and `listPets` share no prefix, so invalidating "all pets" means
+listing every operation by hand and updating that list whenever an endpoint is added.
 
-**OpenAPI `tags`** (`['Pets', 'getPet']`). Semantically appealing, but tags are
-optional, frequently missing, and inconsistently applied. A key strategy that
-silently degrades on half of real specs isn't one.
+**OpenAPI `tags`** (`['Pets', 'getPet']`). Nice in theory, but tags are optional, often missing, and used
+inconsistently. A key strategy that quietly gets worse on half of real specs isn't good enough.
 
-**A configurable key strategy.** Tempting, but it makes every downstream
-example and doc conditional, and multiplies the test matrix, to serve a
-preference rather than a need. Revisit only if concrete cases appear that
-path segments genuinely cannot express.
+**Making the key strategy configurable.** Tempting, but every example and doc page would need an "unless you configured
+it differently" note, and the test matrix would multiply, all for a preference rather than a real need. Worth revisiting
+if someone has a case that path segments really can't handle.

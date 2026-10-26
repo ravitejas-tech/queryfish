@@ -5,60 +5,49 @@
 
 ## Context
 
-QueryFish's v0.1 was built in a single pass, and several of its choices look
-wrong at first glance:
+The first version of QueryFish was built in one go, and a few of its choices look wrong at first glance:
 
-- The loader deliberately _doesn't_ dereference `$ref`s, despite that being the
-  obvious thing to do with an OpenAPI parser.
-- `createInfiniteQuery` support exists but generates nothing by default.
+- The loader doesn't dereference `$ref`s, even though that's the obvious thing to do with an OpenAPI parser.
+- `createInfiniteQuery` is supported but generates nothing by default.
 - Query keys are `['pets', '{petId}']` rather than the operation name.
 
-Each of these was made for a concrete reason, and in at least one case the
-reason only emerged after the naive version failed a test. That reasoning
-currently lives in commit messages and prose scattered through
-`docs/architecture.md` — neither of which a contributor reads before opening a
-PR that undoes the decision.
+Each of these was done for a specific reason, and at least one of those reasons only came up after the obvious version
+failed a test. Right now that reasoning is spread across commit messages and `docs/architecture.md`, and nobody reads
+either of those before opening a PR that undoes it.
 
-For a project whose goal is attracting outside contributors, "why is it like
-this?" needs an answer that doesn't require asking a maintainer.
+If we want outside contributors, they need a way to find out why something is the way it is without having to ask.
 
 ## Decision
 
-QueryFish keeps Architecture Decision Records in `docs/adr/`, following
-Michael Nygard's format: numbered, immutable once accepted, and superseded
-rather than edited.
+QueryFish keeps Architecture Decision Records in `docs/adr/`, in Michael Nygard's format: numbered, not edited once
+accepted, and replaced by a new ADR when a decision changes.
 
-Decisions already embedded in v0.1 are recorded retroactively, since those are
-precisely the ones a new contributor will trip over first.
+The decisions already in the code are recorded after the fact, since those are the ones a new contributor is most likely
+to trip over.
 
 ## Consequences
 
 ### What this enables
 
-- A contributor who disagrees with a decision can read the reasoning and the
-  rejected alternatives before spending time on a PR.
-- Code can point at the reasoning: a one-line comment referencing an ADR beats
-  a paragraph repeated in three files.
-- Decisions that turn out to be wrong get superseded with a visible trail,
-  rather than being quietly reverted and re-litigated later.
+- Someone who disagrees with a decision can read the reasoning and the alternatives before spending time on a PR.
+- Code can point to the reasoning. A one-line comment linking an ADR is better than the same paragraph copied into three
+  files.
+- When a decision turns out to be wrong, it gets replaced with a visible trail instead of being quietly reverted and
+  argued about again later.
 
 ### What this costs
 
-- Every significant decision now costs a document. This is real friction, and
-  it is the point — if a decision isn't worth 15 minutes of writing, it
-  probably isn't architectural.
-- ADRs go stale if nobody supersedes them. The index in `README.md` and the
-  status field are the mitigation.
+- Each significant decision now needs a document. That's some extra work, but if a decision isn't worth 15 minutes of
+  writing, it probably isn't an architectural one.
+- ADRs go stale if nobody updates them. The index in `README.md` and the status field help with that.
 
 ### What we rejected
 
-**Comments in the code alone.** Works for local reasoning, but a decision that
-spans the loader, the IR, and two emitters has no single place to live — and
-the alternatives considered have nowhere to go at all.
+**Only comments in the code.** Fine for local reasoning, but a decision that touches the loader, the IR and two emitters
+has no single place to live, and there's nowhere to put the alternatives.
 
-**A single DECISIONS.md.** Simpler at first, but grows into a file nobody
-reads, with no natural unit to supersede.
+**One big DECISIONS.md.** Simpler at first, but it turns into a long file nobody reads, and there's no clean way to
+replace one decision in it.
 
-**Nothing, relying on git history.** Commit messages are the right place for
-_what changed_, not for _what is true now_. Finding a decision means knowing
-which commit to look for, which is exactly what a newcomer can't do.
+**Nothing, just git history.** Commit messages are good for what changed, not for what's true now. To find a decision
+you'd need to know which commit to look at, and a newcomer won't.

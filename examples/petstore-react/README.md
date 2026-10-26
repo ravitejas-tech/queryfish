@@ -1,11 +1,9 @@
 # Petstore example
 
-A small React app consuming hooks that QueryFish generated from
-[`openapi.yaml`](./openapi.yaml).
+A small React app that uses the hooks QueryFish generated from [`openapi.yaml`](./openapi.yaml).
 
-The generated output in [`src/api/`](./src/api) is **committed on purpose** — it
-shows what QueryFish actually produces without needing to run anything, and CI
-regenerates it to make sure the committed copy never drifts from the generator.
+The generated code in [`src/api/`](./src/api) is committed, so you can see what QueryFish produces without running
+anything. CI regenerates it and fails if the committed copy doesn't match.
 
 ```bash
 npm install
@@ -13,35 +11,29 @@ npm run generate   # regenerate src/api from openapi.yaml
 npm run dev        # start the app
 ```
 
-The API URL defaults to a placeholder host; point it somewhere real with
-`VITE_API_URL` if you want live data.
+The API URL points at a placeholder host by default. Set `VITE_API_URL` if you want to point it at a real one.
 
-## What to look at
+## Files to look at
 
-| File                                           | Why                                                   |
-| ---------------------------------------------- | ----------------------------------------------------- |
-| [`queryfish.config.ts`](./queryfish.config.ts) | The whole configuration — three lines                 |
-| [`src/client.ts`](./src/client.ts)             | The HTTP client _you_ own; QueryFish ships no runtime |
-| [`src/api/`](./src/api)                        | Generated: types, requests, queries, mutations        |
-| [`src/App.tsx`](./src/App.tsx)                 | Hooks in use, including prefix invalidation           |
+| File                                           | Why                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| [`queryfish.config.ts`](./queryfish.config.ts) | The whole config, three options                              |
+| [`src/client.ts`](./src/client.ts)             | The HTTP client, which you write; QueryFish ships no runtime |
+| [`src/api/`](./src/api)                        | Generated: types, requests, queries, mutations               |
+| [`src/App.tsx`](./src/App.tsx)                 | The hooks in use, including prefix invalidation              |
 
-## Things worth noticing
+## Things to notice
 
-**Query keys mirror the URL.** `useGetPet` uses `['pets', '{petId}']`, so a
-single call clears every pet-related query:
+**Query keys follow the URL.** `useGetPet` uses `['pets', '{petId}']`, so one call clears every pet-related query:
 
 ```ts
 queryClient.invalidateQueries({ queryKey: ['pets'] })
 ```
 
-**Variables are typed from the spec.** `status` accepts only
-`'available' | 'pending' | 'sold'`; a typo fails the build rather than the
-request.
+**Variables are typed from the spec.** `status` only accepts `'available' | 'pending' | 'sold'`, so a typo fails the
+build instead of the request.
 
-**Path parameters are required.** `useGetPet({ variables: { petId } })` will not
-compile without `petId`, even though the spec's `required` flag is easy to
-forget.
+**Path parameters are always required.** `useGetPet({ variables: { petId } })` won't compile without `petId`, even if the
+spec forgot to mark it `required`.
 
-**No infinite queries here.** This spec doesn't opt in to pagination, so
-`infiniteQueries.ts` is not generated at all — QueryFish never guesses which
-endpoints paginate.
+**There are no infinite queries.** This spec doesn't opt in to pagination, so `infiniteQueries.ts` isn't generated.

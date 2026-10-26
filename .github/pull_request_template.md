@@ -1,6 +1,6 @@
 <!--
-Thanks for contributing. A short description of *why* is more useful than a
-description of what — the diff already shows what.
+Thanks for the PR! A sentence or two on why you made this change helps more
+than a description of what changed. The diff already shows that.
 -->
 
 ## What this changes
@@ -11,7 +11,7 @@ description of what — the diff already shows what.
 
 - [ ] Commits follow the [convention](../docs/conventions/commits.md)
 - [ ] `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check` pass
-- [ ] Added a changeset (`npx changeset`) — see [versioning](../docs/conventions/versioning.md)
+- [ ] Added a changeset (`npx changeset`) if users will notice the change. See [versioning](../docs/conventions/versioning.md)
 - [ ] If this fixes a generation bug: added a case to `test/fixtures/edge-cases.yaml`
 - [ ] If snapshots changed: reviewed the diff and it is what users should get
 - [ ] If this changes a recorded decision: added or superseded an [ADR](../docs/adr/)

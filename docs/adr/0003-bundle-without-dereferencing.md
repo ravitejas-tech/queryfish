@@ -5,34 +5,30 @@
 
 ## Context
 
-`@redocly/openapi-core` offers `bundle({ ref, config, dereference })`. Passing
-`dereference: true` inlines every `$ref` so downstream code never has to
-resolve pointers. That is the obvious choice, and it is what QueryFish was
-originally built on.
+`@redocly/openapi-core` has `bundle({ ref, config, dereference })`. With `dereference: true`, every `$ref` is inlined,
+so later code never has to resolve pointers. That's the obvious choice, and it's what QueryFish was first built on.
 
-It fails on recursive schemas, which are ordinary — `Comment.replies`,
-`Category.children`, `Node`/`Edge` pairs.
+It breaks on recursive schemas, and those are common: `Comment.replies`, `Category.children`, `Node`/`Edge` pairs.
 
-Measured against `test/fixtures/edge-cases.yaml`:
+Here's what happens with `test/fixtures/edge-cases.yaml`:
 
 ```js
 const res = await bundle({ ref, config, dereference: true })
 const Comment = res.bundle.parsed.components.schemas.Comment
 const nested = Comment.properties.replies.items
 
-nested === Comment // false — a *copy*, not the same object
-nested.$ref // undefined — the pointer is gone
-nested.properties.replies.items === nested // true — the copy is self-referential
+nested === Comment // false: it's a copy, not the same object
+nested.$ref // undefined: the pointer is gone
+nested.properties.replies.items === nested // true: the copy points to itself
 JSON.stringify(res.bundle.parsed) // throws: Converting circular structure to JSON
 ```
 
-Two consequences, both fatal:
+That causes two problems:
 
-1. **The document is circular.** A naive recursive walk never terminates.
-2. **Recursion is no longer expressible.** Because the nested object is a
-   _copy_ rather than the original, identity matching against registered
-   components fails. The generator has no way to know the nested schema _is_
-   `Comment`. The best it can do is inline one level and give up:
+1. **The document is circular.** A plain recursive walk never ends.
+2. **The recursion can't be expressed any more.** The nested object is a copy, so comparing it against the registered
+   components doesn't match. The generator has no way to know that the nested schema is `Comment`. The best it can do is
+   inline one level and give up:
 
     ```ts
     export interface Comment {
@@ -40,55 +36,45 @@ Two consequences, both fatal:
     }
     ```
 
-The second problem is the real one. Cycle guards stop the hang, but they can't
-recover the information that dereferencing destroyed.
+The second one is the real problem. A cycle guard stops the infinite loop, but it can't bring back the information that
+dereferencing threw away.
 
-Bundling _without_ `dereference` still produces a single self-contained
-document — remote and cross-file refs are pulled in — but internal pointers
-survive, and the document is acyclic and serializable.
+Bundling without `dereference` still gives a single self-contained document (remote and cross-file refs are pulled in),
+but internal pointers are kept, and the document has no cycles and can be serialized.
 
 ## Decision
 
 QueryFish bundles with `dereference: false` (`src/loader/load.ts`).
 
-`SchemaConverter` registers every `#/components/schemas` and `#/definitions`
-entry up front, mapping JSON pointer → emitted type name. A `$ref` to a
-registered schema becomes `{ kind: 'ref', name }`; unregistered pointers are
-resolved manually with an in-progress guard.
+`SchemaConverter` registers every `#/components/schemas` and `#/definitions` entry up front, mapping each JSON pointer to
+the type name it will be emitted as. A `$ref` to a registered schema becomes `{ kind: 'ref', name }`. Any other pointer
+is resolved by hand, with a guard for pointers that are already being resolved.
 
 ## Consequences
 
 ### What this enables
 
-- Recursive and mutually recursive schemas emit correctly:
-  `replies?: Comment[]`, `edge?: Edge`.
-- The document stays acyclic and serializable, so it can be logged, inspected,
-  and diffed while debugging.
-- Named schemas produce named TypeScript types, which is what makes generated
-  code readable rather than a wall of nested anonymous objects.
+- Recursive and mutually recursive schemas come out right: `replies?: Comment[]`, `edge?: Edge`.
+- The document has no cycles, so you can log it, inspect it and diff it while debugging.
+- Named schemas become named TypeScript types, which is a big part of why the generated code is readable instead of a
+  pile of nested anonymous objects.
 
 ### What this costs
 
-- `SchemaConverter` carries pointer-resolution logic it wouldn't otherwise
-  need (`resolvePointer`, the `inProgress` set).
-- It must handle both `#/components/schemas/` (OpenAPI 3) and `#/definitions/`
-  (Swagger 2) pointer shapes.
-- Anyone who assumes a dereferenced document — a reasonable assumption — will
-  be surprised. Hence the module comment in `src/loader/load.ts` and this ADR.
+- `SchemaConverter` needs pointer resolution logic it wouldn't otherwise need (`resolvePointer` and the `inProgress`
+  set).
+- It has to handle both `#/components/schemas/` (OpenAPI 3) and `#/definitions/` (Swagger 2) pointers.
+- Anyone who assumes the document is dereferenced (a reasonable assumption) will be surprised. That's why there's a
+  comment at the top of `src/loader/load.ts` and this ADR.
 
 ### What we rejected
 
-**`dereference: true` plus a WeakSet cycle guard.** This was the original
-implementation. It stops the infinite loop but still emits `replies?: unknown`,
-because the information needed to emit `Comment` was destroyed by
-dereferencing. Caught by `test/generate.test.ts` → "emits self-referential
-types by name".
+**`dereference: true` with a WeakSet cycle guard.** This was the first implementation. It stopped the infinite loop but
+still emitted `replies?: unknown`, because the information needed to emit `Comment` was already gone. The test
+"emits self-referential types by name" in `test/generate.test.ts` caught it.
 
-**Dereferencing, then reconstructing names by structural comparison.**
-Deep-comparing every nested schema against every component to re-discover which
-one it is: quadratic, fragile, and it cannot distinguish two components that
-happen to have identical shapes.
+**Dereferencing, then working out the names again by comparing structures.** Deep-comparing every nested schema against
+every component is quadratic and fragile, and it can't tell apart two components that happen to have the same shape.
 
-**Writing our own `$ref` resolver.** Redocly already handles remote refs,
-cross-file refs, and Swagger 2. Not worth reimplementing to avoid one option
-flag.
+**Writing our own `$ref` resolver.** Redocly already handles remote refs, cross-file refs and Swagger 2. Not worth
+rebuilding all that to avoid one option.

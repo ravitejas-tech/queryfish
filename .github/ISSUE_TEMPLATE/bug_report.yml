@@ -5,9 +5,10 @@ body:
     - type: markdown
       attributes:
           value: |
-              Thanks for the report. The most useful thing you can include is **the
-              smallest piece of OpenAPI that reproduces it** — a few lines of YAML
-              beats a long description, and it usually becomes a test case directly.
+              Thanks for reporting this. The most helpful thing you can include is
+              **the smallest bit of OpenAPI that reproduces it**. A few lines of YAML
+              are easier to work with than a long description, and they can usually
+              go straight into a test case.
 
     - type: textarea
       id: spec
@@ -49,7 +50,7 @@ body:
       id: version
       attributes:
           label: QueryFish version
-          placeholder: 0.1.0
+          placeholder: 1.0.0
       validations:
           required: true
 

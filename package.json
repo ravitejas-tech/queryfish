@@ -1,7 +1,7 @@
 {
     "name": "queryfish",
     "version": "1.0.0",
-    "description": "OpenAPI → type-safe React Query Kit factories.",
+    "description": "Generate typed React Query hooks from OpenAPI and Swagger specs.",
     "keywords": [
         "openapi",
         "swagger",

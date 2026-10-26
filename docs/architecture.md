@@ -1,91 +1,86 @@
 # Architecture
 
-How QueryFish turns an OpenAPI document into typed React Query hooks, and why it is
-structured the way it is. If you are here to contribute, this is the right place to start.
+How QueryFish turns an OpenAPI document into typed React Query hooks, and why it's put together the way it is. If you
+want to contribute, start here.
 
-Decisions summarised here are recorded in full — with the alternatives that were
-rejected — in the [ADRs](./adr/).
+The bigger decisions are written up in more detail, including the alternatives we didn't pick, in the
+[ADRs](./adr/).
 
 ---
 
 ## The pipeline
 
-QueryFish is a four-stage pipeline. Each stage is pure — it takes data in and returns
-data out, with no hidden state — which means every stage can be tested on its own.
+Generation runs in four stages. Each one takes data in and returns data out with no shared state, so each can be tested
+on its own.
 
 ```
 spec (file | URL | JSON | YAML)
   │
-  ├─ 1. loader/   → dereferenced OpenAPI document + source info for errors
-  ├─ 2. ir/       → normalized, framework-agnostic Operation[] + schema graph
-  ├─ 3. emit/     → TypeScript source strings (one emitter per output file)
-  └─ 4. write/    → prettier-format, diff against disk, write or --dry-run
+  ├─ 1. loader/   → one bundled document, $refs kept as pointers
+  ├─ 2. ir/       → Operation[] plus the named types
+  ├─ 3. emit/     → TypeScript source, one emitter per output file
+  └─ 4. write     → format with Prettier, compare with disk, write (or --dry-run)
 ```
 
-### Why an IR?
+### Why have an IR at all?
 
-The obvious design is to walk the OpenAPI document and print TypeScript as you go.
-We don't do that, for three reasons:
+The simplest design would walk the OpenAPI document and print TypeScript as it goes. We don't, for three reasons:
 
-1. **It is where the hard problems live.** Cycle-breaking, name-collision resolution,
-   and pagination metadata all need a normalized model. Solving them mid-print means
-   solving them repeatedly, slightly differently, in every emitter.
-2. **It keeps emitters small and reviewable.** An emitter is
-   `(ir, config) => string` — no spec parsing, no `$ref` chasing.
-3. **It is how the roadmap stays cheap.** Zod schemas, MSW handlers, and the plugin
-   system are each "another emitter over the same IR" rather than a rewrite. The IR is
-   the extension point, chosen deliberately so that adding output formats is never a
-   breaking change.
+1. **The hard problems need a whole-spec view.** Breaking cycles, resolving name collisions and attaching pagination
+   info all need a normalized model. Doing them while printing means doing them again in every emitter, each time a
+   little differently.
+2. **Emitters stay small.** An emitter is `(ir, config) => string`. It doesn't parse the spec or chase `$ref`s.
+3. **New outputs are cheap.** Zod schemas, MSW handlers and plugins would each be another emitter over the same IR, not
+   a rewrite.
+
+See [ADR 0002](./adr/0002-four-stage-pipeline-with-an-ir.md).
 
 ---
 
-## Stage 1 — Loader
+## Stage 1: Loader
 
 `src/loader/`
 
-Accepts a local path, an `http(s)` URL, or a pre-parsed object, and returns a fully
-dereferenced document. Parsing is delegated to
+Takes a local path or an `http(s)` URL and returns a single self-contained document. Parsing is done by
 [`@redocly/openapi-core`](https://www.npmjs.com/package/@redocly/openapi-core):
 
 ```ts
 const config = await createConfig({ extends: ['minimal'] })
-const results = await bundle({ ref, config, dereference: true })
-const doc = results.bundle.parsed
+const result = await bundle({ ref: source, config, dereference: false })
+const document = result.bundle.parsed
 ```
 
-Redocly handles OpenAPI 3.0, 3.1, **and Swagger 2.0**, and resolves `$ref` more
-correctly than a hand-rolled resolver — including remote and cross-file references.
+Redocly reads OpenAPI 3.0, 3.1 and Swagger 2.0, and pulls remote and cross-file `$ref`s into the bundle.
 
-Failures are wrapped in a `SpecError` carrying the file, the JSON pointer, and where
-available a line/column, so the CLI can point at the exact spot in the spec rather
-than printing a stack trace.
+Note the `dereference: false`. Internal `$ref`s are kept as pointers on purpose. Dereferencing a self-referential schema
+(`Comment.replies`, `Category.children`) gives you circular objects where the nested copy has lost its name, so the
+generator can't tell it's `Comment` any more. The full story is in
+[ADR 0003](./adr/0003-bundle-without-dereferencing.md).
 
-> ⚠️ **`dereference: true` can produce circular JavaScript objects.** This is not a
-> theoretical concern — any self-referential schema (`Comment.replies`,
-> `Category.children`) produces one, and they are common in real specs. See
-> [Cycle safety](#cycle-safety-the-one-that-bites) below.
+When loading fails, the error is wrapped in a `SpecError` with the file, the JSON pointer and a hint where we have one,
+so the CLI can tell you where the problem is instead of printing a stack trace.
 
 ---
 
-## Stage 2 — IR
+## Stage 2: IR
 
 `src/ir/`
 
-The normalized model everything downstream reads:
+Everything after this point reads the IR, never the raw spec:
 
 ```ts
 interface Operation {
-  operationId: string;         // resolved & collision-free
+  operationId: string;         // resolved, no collisions
   method: 'get' | 'post' | 'put' | 'patch' | 'delete' | ...;
   path: string;                // '/users/{id}'
-  pathSegments: string[];      // ['users', '{id}']  → the query key
+  pathSegments: string[];      // ['users', '{id}'], used as the query key
   pathParams: Param[];
   queryParams: Param[];
   headerParams: Param[];
   requestBody?: IRSchema;
   response: IRSchema;          // 2xx JSON content
   kind: 'query' | 'mutation';
-  pagination?: PaginationSpec; // set ONLY when explicitly opted in
+  pagination?: PaginationSpec; // only set when the user opted in
   deprecated: boolean;
   summary?: string;
   description?: string;
@@ -93,53 +88,50 @@ interface Operation {
 }
 ```
 
-**Query vs mutation** is decided by method: `GET` and `HEAD` become queries,
-everything else becomes mutations.
+`GET` and `HEAD` become queries. Everything else becomes a mutation.
 
-### Cycle safety (the one that bites)
+### Recursive schemas
 
-Because the loader hands us circular objects, the schema walk in `src/ir/schema.ts`
-must never recurse blindly. Two mechanisms prevent it:
+Self-referencing schemas are common in real specs, so `SchemaConverter` in `src/ir/schema.ts` is built around them:
 
-- Named component schemas are **registered up front** and emitted once as top-level
-  interfaces. A nested reference to one emits _the name_, not an expansion.
-- A `WeakSet` of visited schema objects guards the walk itself.
+- Every entry in `#/components/schemas` (or `#/definitions` in Swagger 2.0) is registered up front, mapping its pointer
+  to a type name. A `$ref` to a registered schema becomes a reference to that name, never an expansion. This is what
+  lets `replies` come out as `Comment[]`.
+- A `$ref` to anything else is resolved by hand, with an in-progress set so a cycle through unregistered schemas stops
+  instead of looping.
 
-Inline anonymous schemas are hoisted to generated names so they can participate in
-the same scheme. There is a dedicated fixture (`test/fixtures/edge-cases.yaml`) whose
-whole job is to fail loudly if this regresses.
+Inline schemas that need a name get hoisted to their own top-level type. `test/fixtures/edge-cases.yaml` has cases for
+self-recursion and mutual recursion, and the tests fail if either regresses.
 
 ### Naming
 
-`src/ir/naming.ts` exists because real-world specs routinely break naive generators:
+`src/ir/naming.ts` handles the ways real specs break naive generators:
 
-| Case                      | Handling                                                       |
-| ------------------------- | -------------------------------------------------------------- |
-| Missing `operationId`     | Derive from method + path (`get /users/{id}` → `getUsersById`) |
-| Duplicate `operationId`   | Deterministic suffix, with a warning                           |
-| Non-identifier characters | Sanitized                                                      |
-| Leading digit             | Prefixed                                                       |
-| Reserved TypeScript word  | Suffixed                                                       |
+| Case                      | What happens                                                  |
+| ------------------------- | ------------------------------------------------------------- |
+| Missing `operationId`     | Built from method + path (`get /users/{id}` → `getUsersById`) |
+| Duplicate `operationId`   | Gets a numeric suffix, and a warning is printed               |
+| Non-identifier characters | Dropped, and the rest camel-cased                             |
+| Leading digit             | Prefixed with `n`                                             |
+| Reserved TypeScript word  | Suffixed with `_`                                             |
 
-Every rule has a unit test. This module is where day-one bug reports come from, so it
-is worth over-testing.
+Every rule has a unit test. Naming is where most first bug reports come from, so it's worth testing heavily.
 
 ---
 
-## Stage 3 — Emitters
+## Stage 3: Emitters
 
-`src/emit/` — each emitter is `(ir, config) => string`, one per output file.
+`src/emit/`. Each emitter is `(ir, config) => string` and produces one file.
 
 ### `types.ts`
 
-Interfaces, enums, and unions from component schemas, plus per-operation
-`XxxVariables` and `XxxResponse` types. Handles `allOf` (intersection), `oneOf` /
-`anyOf` (union), `nullable`, arrays, `additionalProperties` (→ `Record`), enums
-(→ string literal unions), and `$ref` cycles via named reference.
+Interfaces and unions for the component schemas, plus `XxxVariables` and `XxxResponse` types for each operation. Covers
+`allOf` (intersection), `oneOf`/`anyOf` (union), `nullable`, arrays, `additionalProperties` (→ `Record`), enums (→
+string literal unions) and recursive types (by name).
 
 ### `requests.ts`
 
-Plain async functions — no React, no hooks, usable from anywhere:
+Plain async functions. No React, so you can call them from anywhere:
 
 ```ts
 import { client } from '../client'
@@ -162,38 +154,37 @@ export const useGetUser = createQuery<GetUserResponse, GetUserVariables>({
 
 ### `mutations.ts`
 
-`createMutation` with `mutationFn` pointing at the matching request function.
+`createMutation`, with `mutationFn` set to the matching request function.
 
 ### `infiniteQueries.ts`
 
-Emitted **only** for operations carrying a `PaginationSpec`. When nothing opts in,
-the file is not written at all. See [Pagination](#pagination-opt-in-by-design).
+Only written when at least one operation has a `PaginationSpec`. Otherwise the file doesn't exist. See
+[Pagination](#pagination-is-opt-in) below.
 
 ### `index.ts`
 
-A barrel re-export so consumers have a single import path.
+Re-exports everything so there's one import path.
 
-All output carries a `// Generated by QueryFish — do not edit.` header and is
-formatted with **the user's own Prettier config** when one is present, so generated
-code matches the surrounding codebase instead of fighting it.
-
----
-
-## Stage 4 — Writer
-
-Formats, diffs against what is already on disk, and either writes or — under
-`--dry-run` — reports what would change and exits without touching anything.
+Every file starts with a `// Generated by QueryFish — do not edit.` header and is formatted with the user's own Prettier
+config, so it looks like the rest of their code.
 
 ---
 
-## Key design decisions
+## Stage 4: Writer
 
-### Zero runtime dependencies
+Lives in `src/generate.ts`. Formats each file, compares it with what's already on disk, and writes the ones that changed.
+With `--dry-run` it reports what would change and writes nothing.
 
-QueryFish ships **no runtime**. Generated code imports only from `react-query-kit`,
-`@tanstack/react-query`, and _your own client module_.
+---
 
-The config names a module path; generated requests import from it:
+## Main design decisions
+
+### No runtime
+
+QueryFish doesn't ship anything that runs in the user's app. Generated code imports from `react-query-kit`,
+`@tanstack/react-query` and the user's own client module, and nothing else.
+
+The config points at that client module, and the generated requests import from it:
 
 ```ts
 // queryfish.config.ts
@@ -205,48 +196,44 @@ export default defineConfig({
 ```
 
 ```ts
-// src/api/client.ts — you write this once
+// src/api/client.ts, written once by the user
 import axios from 'axios'
 export const client = axios.create({ baseURL: '/api' })
 ```
 
-Interceptors, auth, retries, and base URLs stay in your code, where you can debug
-them. We deliberately do not own that layer. The client is typed against a **minimal
-structural interface**, so axios, `fetch`, `ky`, or a custom wrapper all work; the
-test suite verifies a `fetch` adapter specifically to keep the interface from
-drifting into an axios-shaped hole.
+That keeps interceptors, auth, retries and base URLs in the user's code, where they can debug them. The client only has
+to match a small structural interface (`QueryFishClient`), so axios, `fetch`, `ky` or a custom wrapper all work. The
+example app uses a `fetch` client, which helps keep the interface from turning into "whatever axios accepts". See
+[ADR 0006](./adr/0006-user-supplied-http-client.md).
 
 ### Query keys are path segments
 
-The key mirrors the URL structure:
+The key follows the URL:
 
 ```ts
 queryKey: ['users', '{id}']
 ```
 
-`react-query-kit` **automatically appends variables as the last element**, so the
-runtime key is `['users', '{id}', { id: '123' }]` — cache entries are correctly
-separated per-variable without us doing anything.
+react-query-kit appends the variables to the key, so at runtime it's `['users', '{id}', { id: '123' }]` and each user
+gets their own cache entry without us doing anything.
 
-The reason to use path segments rather than the operation name is **prefix
-invalidation**, the most common React Query operation there is:
+We use path segments instead of the operation name because of prefix invalidation, which is probably the most common
+thing people do with a query client:
 
 ```ts
 // invalidate every /users/* query at once
 queryClient.invalidateQueries({ queryKey: ['users'] })
 ```
 
-With operation-name keys (`['getUser']`), every endpoint is an island and you have to
-enumerate them by hand.
+With keys like `['getUser']` there's no relationship between endpoints, and you have to list them all by hand. See
+[ADR 0004](./adr/0004-path-segment-query-keys.md).
 
-### Pagination: opt-in by design
+### Pagination is opt-in
 
-OpenAPI has **no standard** for describing pagination. Generators that guess produce
-the worst possible failure: a hook that looks right, compiles, and silently fetches
-page 2 forever.
+OpenAPI has no standard way to describe pagination. A generator that guesses can produce a hook that looks fine,
+compiles, and then fetches page 2 forever (or never gets past page 1).
 
-So QueryFish does not guess. With no configuration, **no infinite queries are
-emitted at all**. You opt in explicitly, either in config:
+So with no configuration, QueryFish emits no infinite queries at all. You opt in per endpoint, either in the config:
 
 ```ts
 pagination: {
@@ -254,7 +241,7 @@ pagination: {
 }
 ```
 
-or in the spec itself:
+or in the spec:
 
 ```yaml
 x-queryfish-pagination:
@@ -262,34 +249,34 @@ x-queryfish-pagination:
     nextField: nextCursor
 ```
 
-When opted in, the cursor parameter is removed from the variables type and injected
-from `pageParam` instead, so callers cannot pass it by mistake.
+For an opted-in endpoint, the cursor param is removed from the hook's variables type and filled in from `pageParam`, so
+callers can't pass it by mistake. See [ADR 0005](./adr/0005-opt-in-pagination.md).
 
 ---
 
-## Testing strategy
+## Tests
 
-- **Snapshot tests** over three fixtures — Petstore (realistic), `edge-cases.yaml`
-  (circular refs, missing/duplicate `operationId`s, reserved words, `allOf`/`oneOf`,
-  204 no-content, nested inline schemas), and a Swagger 2.0 document. Snapshots are
-  committed, so an emitter change shows up as a readable output diff in the PR. This
-  is the intended review surface, not noise.
-- **Unit tests** for `naming.ts` and for `schema.ts` cycle handling.
-- **A type-level test**: CI runs `tsc --noEmit` over the generated Petstore output.
-  Snapshots prove output did not _change_; only type-checking proves it _compiles_.
-  For a code generator, that is the test that actually matters.
+- **Snapshot tests** over three fixtures: `petstore.yaml` (realistic), `edge-cases.yaml` (recursive refs, missing and
+  duplicate `operationId`s, reserved words, `allOf`/`oneOf`, 204 responses, nested inline schemas) and a Swagger 2.0
+  document. The snapshots are committed, so a change to an emitter shows up in the PR as a diff of the generated code.
+  That diff is the main thing to review.
+- **Unit tests** for naming.
+- **Compile tests** (`test/compile.test.ts`): each fixture is generated into a temp folder and checked with
+  `tsc --noEmit` against the real `react-query-kit`. A snapshot only tells you the output didn't change. This tells you
+  it actually compiles. See [ADR 0007](./adr/0007-verify-generated-code-compiles.md).
+
+CI also regenerates the example app and fails if the committed output is out of date.
 
 ---
 
-## Adding a new emitter
+## Adding an emitter
 
-The common contribution. Roughly:
+This is the most likely kind of contribution. Roughly:
 
 1. Add `src/emit/<name>.ts` exporting `(ir, config) => string`.
 2. Register it in `src/generate.ts`.
 3. Add a config flag if it should be optional.
-4. Run tests and commit the resulting snapshot.
+4. Run the tests and commit the new snapshot.
 
-If you find yourself needing spec details the IR does not carry, extend the IR rather
-than reaching back into the raw document — that boundary is what keeps emitters
-simple.
+If you need something from the spec that the IR doesn't have, add it to the IR rather than reading the raw document
+from the emitter. Keeping that boundary is what keeps emitters simple.
