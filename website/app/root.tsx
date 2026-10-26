@@ -33,7 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             priceCurrency: 'USD',
         },
         description:
-            'Turn OpenAPI 3.0, 3.1 and Swagger 2.0 specs into fully-typed React Query hooks powered by react-query-kit with zero runtime bundle overhead.',
+            'Generates typed React Query hooks, request functions and types from OpenAPI 3.0, 3.1 and Swagger 2.0 specs.',
         softwareVersion: '1.0.0',
         license: 'https://opensource.org/licenses/MIT',
         url: 'https://queryfish.dev/',

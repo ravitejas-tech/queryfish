@@ -4,7 +4,7 @@ import { RoadmapPage } from '../pages/roadmap'
 export function meta({}: Route.MetaArgs) {
     const title = 'Roadmap — QueryFish'
     const description =
-        'QueryFish feature roadmap: Track shipped capabilities, current release features, and upcoming enhancements for OpenAPI React Query codegen.'
+        "What's in QueryFish 1.0 and what's planned next, including Zod schemas, MSW handlers and Suspense hooks."
     const url = 'https://queryfish.dev/roadmap'
     const image = 'https://queryfish.dev/logo.png'
 

@@ -1,32 +1,31 @@
 import { CodeBlock } from '../components/code-block'
 
-const clientCode = `// src/client.ts — A thin wrapper around fetch.
-// QueryFish doesn't dictate your HTTP client; it just
-// expects a function with this shape.
+const clientCode = `// src/client.ts
+// A small fetch wrapper. QueryFish doesn't care which
+// HTTP library you use, as long as the object has
+// a request() method with this shape.
 
 interface RequestConfig {
   method: string
   url: string
-  params?: Record<string, string>
+  params?: Record<string, unknown>
+  headers?: Record<string, unknown>
   data?: unknown
-  headers?: Record<string, string>
 }
 
 export const client = {
   async request<T>(config: RequestConfig): Promise<T> {
     const url = new URL(config.url, 'https://petstore.example.com')
 
-    if (config.params) {
-      for (const [key, value] of Object.entries(config.params)) {
-        url.searchParams.set(key, value)
-      }
+    for (const [key, value] of Object.entries(config.params ?? {})) {
+      if (value != null) url.searchParams.set(key, String(value))
     }
 
     const response = await fetch(url, {
       method: config.method,
       headers: {
         'Content-Type': 'application/json',
-        ...config.headers,
+        ...(config.headers as Record<string, string>),
       },
       body: config.data
         ? JSON.stringify(config.data)
@@ -49,16 +48,18 @@ const configCode = `// queryfish.config.ts
 import { defineConfig } from 'queryfish'
 
 export default defineConfig({
-  input: './petstore.yaml',
+  input: './openapi.yaml',
   output: './src/api',
   client: './src/client.ts',
 })`
 
-const queriesUsageCode = `// Using generated query hooks
-import { useListPets, useGetPet } from './api/queries'
+const queriesUsageCode = `import { useListPets, useGetPet } from './api/queries'
 
 function PetList() {
-  const { data: pets, isPending } = useListPets()
+  const { data: pets, isPending } = useListPets({
+    // status only accepts 'available' | 'pending' | 'sold'
+    variables: { status: 'available' },
+  })
 
   if (isPending) return <Loading />
 
@@ -86,15 +87,14 @@ function PetDetail({ petId }: { petId: string }) {
   )
 }`
 
-const mutationsUsageCode = `// Using generated mutation hooks
-import { useCreatePet, useDeletePet } from './api/mutations'
+const mutationsUsageCode = `import { useCreatePet } from './api/mutations'
 import { useQueryClient } from '@tanstack/react-query'
 
 function CreatePetForm() {
   const queryClient = useQueryClient()
   const { mutate, isPending } = useCreatePet({
     onSuccess: () => {
-      // Smart invalidation — clears all pet-related caches
+      // refetch everything under /pets
       queryClient.invalidateQueries({
         queryKey: ['pets'],
       })
@@ -112,7 +112,7 @@ function CreatePetForm() {
     <form onSubmit={handleSubmit}>
       {/* form fields... */}
       <button disabled={isPending}>
-        {isPending ? 'Creating...' : 'Create Pet'}
+        {isPending ? 'Saving...' : 'Create pet'}
       </button>
     </form>
   )
@@ -139,7 +139,7 @@ export function ExamplesPage() {
                 <div className='mb-16'>
                     <h1 className='mb-4 text-4xl font-extrabold text-text-primary'>Examples</h1>
                     <p className='max-w-2xl text-lg text-text-secondary'>
-                        A walkthrough of the{' '}
+                        A walk through the{' '}
                         <a
                             href='https://github.com/ravitejas-tech/queryfish/tree/main/examples/petstore-react'
                             target='_blank'
@@ -147,7 +147,7 @@ export function ExamplesPage() {
                             className='text-accent-400 no-underline hover:underline'>
                             petstore-react
                         </a>{' '}
-                        example — a React app using QueryFish-generated hooks end to end.
+                        example, a small React app that uses hooks QueryFish generated from a Petstore spec.
                     </p>
                 </div>
 
@@ -157,7 +157,7 @@ export function ExamplesPage() {
                     <ExampleSection
                         step='01'
                         title='Set up React Query'
-                        description='Wrap your app with QueryClientProvider — standard React Query setup.'>
+                        description='Wrap the app in a QueryClientProvider. This is the normal React Query setup, nothing specific to QueryFish.'>
                         <CodeBlock
                             code={appSetupCode}
                             title='src/main.tsx'
@@ -169,8 +169,8 @@ export function ExamplesPage() {
                     {/* Step 2: Client */}
                     <ExampleSection
                         step='02'
-                        title='Write your HTTP client'
-                        description="QueryFish doesn't bundle an HTTP client. You write a thin wrapper around fetch or axios — about 40 lines. Auth, interceptors, and base URL stay in your code.">
+                        title='Write the HTTP client'
+                        description="QueryFish doesn't include an HTTP client. You write a small one around fetch or axios, and that's where auth, interceptors and the base URL go.">
                         <CodeBlock
                             code={clientCode}
                             title='src/client.ts'
@@ -183,7 +183,7 @@ export function ExamplesPage() {
                     <ExampleSection
                         step='03'
                         title='Configure QueryFish'
-                        description='Point at your spec and your client. That&apos;s the minimum config.'>
+                        description="Point it at the spec and the client. That's all the config this example needs.">
                         <CodeBlock
                             code={configCode}
                             title='queryfish.config.ts'
@@ -195,11 +195,11 @@ export function ExamplesPage() {
                     {/* Step 4: Using queries */}
                     <ExampleSection
                         step='04'
-                        title='Use generated query hooks'
-                        description='Import the hooks directly. Variables are type-checked — pass a wrong property name and it won&apos;t compile.'>
+                        title='Use the query hooks'
+                        description="Import the hooks and pass variables. They're checked against the spec, so a wrong name or value won't compile.">
                         <CodeBlock
                             code={queriesUsageCode}
-                            title='Using queries'
+                            title='Queries'
                         />
                     </ExampleSection>
 
@@ -208,11 +208,11 @@ export function ExamplesPage() {
                     {/* Step 5: Using mutations */}
                     <ExampleSection
                         step='05'
-                        title='Use generated mutation hooks'
-                        description="Mutations follow the same pattern. Combine with React Query's invalidation for automatic cache updates using URL-based query keys.">
+                        title='Use the mutation hooks'
+                        description='Mutations work the same way. Because query keys follow the URL, one invalidateQueries call refreshes everything under /pets.'>
                         <CodeBlock
                             code={mutationsUsageCode}
-                            title='Using mutations'
+                            title='Mutations'
                         />
                     </ExampleSection>
                 </div>
@@ -220,13 +220,15 @@ export function ExamplesPage() {
                 {/* Full example link */}
                 <div className='mt-20 text-center'>
                     <div className='glass-card inline-block px-8 py-6'>
-                        <p className='mb-4 text-text-secondary'>Want to see the full working example?</p>
+                        <p className='mb-4 text-text-secondary'>
+                            The full app, including the generated files, is on GitHub.
+                        </p>
                         <a
                             href='https://github.com/ravitejas-tech/queryfish/tree/main/examples/petstore-react'
                             target='_blank'
                             rel='noopener noreferrer'
                             className='btn-primary'>
-                            View on GitHub
+                            View the source
                             <span>→</span>
                         </a>
                     </div>

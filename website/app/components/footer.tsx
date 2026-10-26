@@ -21,13 +21,15 @@ export function Footer() {
                             </span>
                         </Link>
                         <p className='text-sm leading-relaxed text-text-muted'>
-                            OpenAPI → type-safe React Query hooks. Zero runtime, full type safety.
+                            Typed React Query hooks, generated from your OpenAPI spec.
                         </p>
                     </div>
 
                     {/* Product */}
                     <div>
-                        <h4 className='mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary'>Product</h4>
+                        <h4 className='mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary'>
+                            Product
+                        </h4>
                         <ul className='space-y-2'>
                             <li>
                                 <Link
@@ -55,7 +57,9 @@ export function Footer() {
 
                     {/* Community */}
                     <div>
-                        <h4 className='mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary'>Community</h4>
+                        <h4 className='mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary'>
+                            Community
+                        </h4>
                         <ul className='space-y-2'>
                             <li>
                                 <a
@@ -89,7 +93,9 @@ export function Footer() {
 
                     {/* Legal */}
                     <div>
-                        <h4 className='mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary'>Legal</h4>
+                        <h4 className='mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary'>
+                            Legal
+                        </h4>
                         <ul className='space-y-2'>
                             <li>
                                 <a
@@ -116,12 +122,8 @@ export function Footer() {
                 <div className='section-divider mt-10 mb-6' />
 
                 <div className='flex flex-col items-center justify-between gap-4 sm:flex-row'>
-                    <p className='text-sm text-text-muted'>
-                        Built for teams who&apos;d rather write features than fetch functions.
-                    </p>
-                    <p className='text-sm text-text-muted'>
-                        © {new Date().getFullYear()} QueryFish v1.0.0 — MIT License
-                    </p>
+                    <p className='text-sm text-text-muted'>Open source under the MIT License.</p>
+                    <p className='text-sm text-text-muted'>© {new Date().getFullYear()} QueryFish · v1.0.0</p>
                 </div>
             </div>
         </footer>
