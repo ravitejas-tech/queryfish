@@ -2,16 +2,19 @@ import type { Route } from './+types/home'
 import { Landing } from '../pages/landing'
 
 export function meta({}: Route.MetaArgs) {
-    const title = 'QueryFish — OpenAPI → Type-Safe React Query Hooks'
+    const title = 'QueryFish: React Query hooks from your OpenAPI spec'
     const description =
-        'Turn an OpenAPI 3.0, 3.1 or Swagger spec into fully typed React Query hooks powered by react-query-kit — with zero runtime overhead and no hand-written client code.'
+        'QueryFish generates typed React Query hooks, request functions and TypeScript types from OpenAPI 3.0, 3.1 and Swagger 2.0 specs. It runs at build time and adds nothing to your bundle.'
     const url = 'https://queryfish.dev/'
     const image = 'https://queryfish.dev/logo.png'
 
     return [
         { title },
         { name: 'description', content: description },
-        { name: 'keywords', content: 'openapi, swagger, react-query, tanstack-query, react-query-kit, codegen, typescript, type-safe' },
+        {
+            name: 'keywords',
+            content: 'openapi, swagger, react-query, tanstack-query, react-query-kit, codegen, typescript, type-safe',
+        },
         { name: 'robots', content: 'index, follow' },
 
         // OpenGraph

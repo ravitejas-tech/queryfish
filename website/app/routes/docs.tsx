@@ -4,14 +4,17 @@ import { DocsPage } from '../pages/docs'
 export function meta({}: Route.MetaArgs) {
     const title = 'Documentation — QueryFish'
     const description =
-        'Comprehensive guide to QueryFish: Quick start, CLI commands, configuration options, URL query key structure, and opt-in pagination.'
+        'How to set up QueryFish: install it, write a client, add a config file and generate. Also covers query keys, pagination, config options and CLI flags.'
     const url = 'https://queryfish.dev/docs'
     const image = 'https://queryfish.dev/logo.png'
 
     return [
         { title },
         { name: 'description', content: description },
-        { name: 'keywords', content: 'queryfish docs, openapi codegen documentation, react query kit guide, typescript api hooks' },
+        {
+            name: 'keywords',
+            content: 'queryfish docs, openapi codegen documentation, react query kit guide, typescript api hooks',
+        },
         { name: 'robots', content: 'index, follow' },
 
         // OpenGraph

@@ -12,23 +12,24 @@ const sections = [
     { id: 'edge-cases', label: 'Edge Cases' },
 ]
 
-const installCode = `npm install queryfish --save-dev`
+const installCode = `npm install --save-dev queryfish
+npm install @tanstack/react-query react-query-kit`
 
 const clientAxiosCode = `// src/api/client.ts
 import axios from 'axios'
 
-// Create an axios instance with your base URL.
-// You can add auth headers, interceptors, etc.
-// QueryFish will use this to make all API calls.
+// The generated request functions import this.
+// Add auth headers and interceptors here as usual.
 export const client = axios.create({
   baseURL: '/api',
 })`
 
-const clientFetchCode = `// src/api/client.ts — using fetch instead of axios
+const clientFetchCode = `// src/api/client.ts
 interface RequestConfig {
   method: string
   url: string
-  params?: Record<string, string>
+  params?: Record<string, unknown>
+  headers?: Record<string, unknown>
   data?: unknown
 }
 
@@ -36,16 +37,17 @@ export const client = {
   async request<T>(config: RequestConfig): Promise<T> {
     const url = new URL(config.url, 'https://api.example.com')
 
-    // Append query parameters
-    if (config.params) {
-      for (const [key, val] of Object.entries(config.params)) {
-        url.searchParams.set(key, val)
-      }
+    for (const [key, value] of Object.entries(config.params ?? {})) {
+      // skip optional params that weren't passed
+      if (value != null) url.searchParams.set(key, String(value))
     }
 
     const res = await fetch(url, {
       method: config.method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(config.headers as Record<string, string>),
+      },
       body: config.data ? JSON.stringify(config.data) : undefined,
     })
 
@@ -59,43 +61,37 @@ const configCode = `// queryfish.config.ts
 import { defineConfig } from 'queryfish'
 
 export default defineConfig({
-  // Path or URL to your OpenAPI/Swagger document.
-  // This is the only required option.
+  // Path or URL to your OpenAPI or Swagger file. Required.
   input: './openapi.yaml',
 
-  // Where to write the generated files.
+  // Folder for the generated files. Required.
   output: './src/api',
 
-  // Path to the file that exports your HTTP client.
-  // QueryFish imports this in the generated requests.ts.
+  // The file that exports your HTTP client.
+  // The generated requests.ts imports it.
   client: './src/api/client.ts',
 
-  // Opt in to infinite queries for specific endpoints.
-  // If you don't need pagination, leave this out entirely.
+  // Infinite queries, per endpoint. Leave this out
+  // if you don't need pagination.
   pagination: {
     '/pets': {
-      param: 'cursor',      // the query param name
-      nextField: 'nextCursor', // the response field for next page
+      param: 'cursor',         // query param that takes the cursor
+      nextField: 'nextCursor', // response field with the next cursor
     },
   },
 
-  // Format the generated code with your Prettier config.
-  // Default: true — set to false to skip formatting.
+  // Format the output with your Prettier config. Default: true
   format: true,
 
-  // Generate a barrel index.ts that re-exports everything.
-  // Default: true
+  // Write an index.ts that re-exports everything. Default: true
   barrel: true,
 })`
 
 const generateCode = `npx queryfish generate`
 
-const usageQueryCode = `// In any React component:
-import { useListPets, useGetPet } from './api/queries'
+const usageQueryCode = `import { useListPets, useGetPet } from './api/queries'
 
 function PetList() {
-  // No need to define query keys or fetcher functions.
-  // Everything is generated with full TypeScript types.
   const { data: pets, isPending, error } = useListPets()
 
   if (isPending) return <Spinner />
@@ -111,8 +107,7 @@ function PetList() {
 }
 
 function PetDetail({ petId }: { petId: string }) {
-  // TypeScript ensures petId is a string —
-  // pass the wrong type and it won't compile.
+  // petId is required, and it has to be a string
   const { data: pet } = useGetPet({
     variables: { petId },
   })
@@ -128,8 +123,8 @@ function CreatePetButton() {
 
   const { mutate, isPending } = useCreatePet({
     onSuccess: () => {
-      // Because query keys mirror URLs, this one call
-      // invalidates /pets, /pets/{id}, etc.
+      // invalidates /pets, /pets/{petId} and
+      // anything else under /pets
       queryClient.invalidateQueries({
         queryKey: ['pets'],
       })
@@ -143,13 +138,12 @@ function CreatePetButton() {
         body: { name: 'Buddy', tag: 'dog' },
       })}
     >
-      {isPending ? 'Creating...' : 'Add Pet'}
+      {isPending ? 'Saving...' : 'Add pet'}
     </button>
   )
 }`
 
-const specExampleCode = `# A typical OpenAPI operation:
-paths:
+const specExampleCode = `paths:
   /pets/{petId}:
     get:
       operationId: getPet
@@ -166,26 +160,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Pet'`
 
-const queryKeyCode = `// After creating, updating, or deleting any pet:
+const queryKeyCode = `// after creating, updating or deleting a pet
 queryClient.invalidateQueries({
   queryKey: ['pets'],
 })
 
-// This single call refetches:
-//   /pets          → useListPets
-//   /pets/{petId}  → useGetPet
-//   /pets/{petId}/toys → useListPetToys
-//
-// With operation-name keys you'd have to list
-// every affected hook by hand and update that list
-// whenever an endpoint is added.`
+// that covers every query under /pets:
+//   /pets               useListPets
+//   /pets/{petId}       useGetPet
+//   /pets/{petId}/toys  useListPetToys`
 
-const paginationSpecCode = `# Add this extension to any GET operation:
+const paginationSpecCode = `# on the GET operation that paginates
 x-queryfish-pagination:
-  param: cursor        # query parameter name
-  nextField: nextCursor  # field in the response body`
+  param: cursor          # query param that takes the cursor
+  nextField: nextCursor  # response field with the next cursor`
 
-const paginationConfigCode = `// Or configure it in queryfish.config.ts:
+const paginationConfigCode = `// queryfish.config.ts
 pagination: {
   '/pets': {
     param: 'cursor',
@@ -193,14 +183,12 @@ pagination: {
   },
 }
 
-// You can also disable pagination that was
-// opted in via the spec extension:
+// false turns off an opt-in that came from the spec
 pagination: {
   '/feed': false,
 }`
 
-const paginationUsageCode = `// The generated hook handles everything:
-import { useListPetsInfinite } from './api/infiniteQueries'
+const paginationUsageCode = `import { useListPetsInfinite } from './api/infiniteQueries'
 
 function PetFeed() {
   const {
@@ -210,10 +198,8 @@ function PetFeed() {
     isFetchingNextPage,
   } = useListPetsInfinite()
 
-  // 'cursor' is excluded from variables —
-  // it comes from pageParam automatically.
-  // TypeScript enforces this so you can't
-  // accidentally pass it.
+  // cursor isn't in the variables type.
+  // The hook passes it from pageParam.
 }`
 
 export function DocsPage() {
@@ -251,100 +237,104 @@ export function DocsPage() {
                     <main className='prose-ocean min-w-0'>
                         <h1 className='mb-2 text-4xl font-extrabold text-text-primary'>Documentation</h1>
                         <p className='mb-12 text-lg text-text-secondary'>
-                            Everything you need to go from an OpenAPI spec to type-safe React Query hooks in your app.
+                            How to set up QueryFish, and what it generates.
                         </p>
 
                         {/* ─── Quick Start ─── */}
                         <section id='quick-start'>
                             <h2>Quick Start</h2>
                             <p>
-                                QueryFish is a code generator that reads your OpenAPI document and writes TypeScript files
-                                containing React Query hooks. You install it as a <strong>dev dependency</strong> — it
-                                produces code at build time, not at runtime.
+                                QueryFish reads your OpenAPI document and writes TypeScript files with React Query hooks
+                                in them. It runs at build time, so it only needs to be a dev dependency.
                             </p>
 
-                            <h3>1. Install QueryFish</h3>
-                            <p>Add it to your project as a dev dependency. Nothing from QueryFish ends up in your production bundle.</p>
+                            <h3>1. Install</h3>
+                            <p>
+                                The generated hooks import <code>@tanstack/react-query</code> and{' '}
+                                <code>react-query-kit</code>, so install those too if your app doesn&apos;t have them
+                                yet.
+                            </p>
                             <CodeBlock
                                 code={installCode}
                                 language='bash'
                                 title='Terminal'
                             />
 
-                            <h3>2. Create your HTTP client</h3>
+                            <h3>2. Write a client</h3>
                             <p>
-                                QueryFish does <strong>not</strong> ship its own HTTP client. Instead, you write a small
-                                wrapper around whatever library you already use (axios, fetch, ky, etc.). This keeps you
-                                in full control of authentication, interceptors, base URLs, and error handling.
+                                QueryFish doesn&apos;t come with an HTTP client. The generated code imports a{' '}
+                                <code>client</code> from a file you write, which can wrap whatever you already use
+                                (axios, fetch, ky). Auth, interceptors, base URLs and error handling all stay in that
+                                file.
                             </p>
-                            <p>Here are two examples — pick whichever fits your stack:</p>
+                            <p>Two versions, depending on what you use:</p>
 
-                            <h3>Option A: Axios</h3>
+                            <h3>With axios</h3>
                             <CodeBlock
                                 code={clientAxiosCode}
-                                title='src/api/client.ts — Axios'
+                                title='src/api/client.ts (axios)'
                             />
 
-                            <h3>Option B: Fetch</h3>
+                            <h3>With fetch</h3>
                             <CodeBlock
                                 code={clientFetchCode}
-                                title='src/api/client.ts — Fetch'
+                                title='src/api/client.ts (fetch)'
                             />
 
                             <div className='callout-tip'>
                                 <p>
-                                    <strong>💡 Tip:</strong> Your client just needs to export a <code>client</code> object
-                                    with a <code>request&lt;T&gt;(config)</code> method. The config has <code>method</code>,{' '}
-                                    <code>url</code>, <code>params</code> (query string), and <code>data</code> (body).
+                                    <strong>Note:</strong> any object works, as long as it&apos;s exported as{' '}
+                                    <code>client</code> and has a <code>request&lt;T&gt;(config)</code> method. The
+                                    config has <code>method</code>, <code>url</code>, <code>params</code> (query
+                                    string), <code>headers</code> and <code>data</code> (body).
                                 </p>
                             </div>
 
                             <h3>3. Add a config file</h3>
                             <p>
-                                Create a <code>queryfish.config.ts</code> in your project root. At minimum, you need three
-                                things: where the spec is, where to write output, and where your client lives.
+                                Create <code>queryfish.config.ts</code> in your project root. <code>input</code> and{' '}
+                                <code>output</code> are required. <code>client</code> defaults to <code>./client</code>,
+                                so you&apos;ll usually want to set it.
                             </p>
                             <CodeBlock
                                 code={configCode}
                                 title='queryfish.config.ts'
                             />
                             <p>
-                                Config files can be <code>.ts</code>, <code>.mts</code>, <code>.js</code>,{' '}
-                                <code>.mjs</code>, or <code>.json</code> — use whatever fits your project.
+                                The config can also be a <code>.mts</code>, <code>.js</code>, <code>.mjs</code> or{' '}
+                                <code>.json</code> file.
                             </p>
 
                             <h3>4. Run the generator</h3>
-                            <p>One command reads your spec and writes the output files:</p>
                             <CodeBlock
                                 code={generateCode}
                                 language='bash'
                                 title='Terminal'
                             />
                             <p>
-                                You&apos;ll see a summary of which files were created or updated. The generated code is
-                                formatted with <strong>your</strong> Prettier config, so it looks like the rest of your
-                                codebase.
+                                It prints the files it created or changed. The output is run through Prettier with your
+                                project&apos;s config.
                             </p>
 
-                            <h3>5. Use the generated hooks</h3>
+                            <h3>5. Use the hooks</h3>
                             <p>
-                                Import the hooks directly in your components. TypeScript gives you full autocomplete and
-                                catches type errors at compile time — not at runtime.
+                                Import them in your components like any other hook. Variables and response data are
+                                typed from the spec.
                             </p>
                             <CodeBlock
                                 code={usageQueryCode}
-                                title='Using query hooks'
+                                title='Queries'
                             />
 
-                            <h3>6. Use generated mutations</h3>
+                            <h3>6. Use the mutations</h3>
                             <p>
-                                Mutations work the same way. The generated hooks wrap <code>react-query-kit</code>&apos;s{' '}
-                                <code>createMutation</code>, so you get all the standard React Query options like{' '}
-                                <code>onSuccess</code>, <code>onError</code>, and <code>onSettled</code>.
+                                Mutations are built with react-query-kit&apos;s <code>createMutation</code>, so the
+                                usual options like <code>onSuccess</code>, <code>onError</code> and{' '}
+                                <code>onSettled</code> all work.
                             </p>
                             <CodeBlock
                                 code={usageMutationCode}
-                                title='Using mutation hooks'
+                                title='Mutations'
                             />
                         </section>
 
@@ -353,43 +343,43 @@ export function DocsPage() {
                         {/* ─── How It Works ─── */}
                         <section id='how-it-works'>
                             <h2>How It Works</h2>
-                            <p>
-                                QueryFish reads your OpenAPI document and runs it through a four-stage pipeline:
-                            </p>
+                            <p>Generation happens in four steps:</p>
                             <ul>
                                 <li>
-                                    <strong>Load</strong> — Reads and bundles the spec, resolving all <code>$ref</code>{' '}
-                                    references. Supports local files, URLs, YAML, and JSON.
+                                    <strong>Load:</strong> reads the spec from a file or URL (YAML or JSON) and pulls
+                                    any external <code>$ref</code>s into a single document.
                                 </li>
                                 <li>
-                                    <strong>Build IR</strong> — Converts the spec into an intermediate representation that
-                                    normalizes differences between OpenAPI 3.0, 3.1, and Swagger 2.0.
+                                    <strong>Build the IR:</strong> turns the spec into an internal model of operations
+                                    and types. This is where the differences between OpenAPI 3.0, 3.1 and Swagger 2.0
+                                    get smoothed over.
                                 </li>
                                 <li>
-                                    <strong>Emit</strong> — Generates TypeScript source files from the IR:{' '}
-                                    <code>types.ts</code>, <code>requests.ts</code>, <code>queries.ts</code>,{' '}
-                                    <code>mutations.ts</code>, and optionally <code>infiniteQueries.ts</code>.
+                                    <strong>Emit:</strong> writes the TypeScript for <code>types.ts</code>,{' '}
+                                    <code>requests.ts</code>, <code>queries.ts</code>, <code>mutations.ts</code> and, if
+                                    you opted in, <code>infiniteQueries.ts</code>.
                                 </li>
                                 <li>
-                                    <strong>Format</strong> — Runs Prettier on the output so it matches your project&apos;s
-                                    style. Skippable with <code>--no-format</code>.
+                                    <strong>Write:</strong> formats the output with Prettier, compares it with
+                                    what&apos;s on disk, and writes whatever changed. Use <code>--no-format</code> to
+                                    skip Prettier.
                                 </li>
                             </ul>
 
-                            <p>Here&apos;s what a single endpoint in your spec looks like:</p>
+                            <p>Take this endpoint:</p>
                             <CodeBlock
                                 code={specExampleCode}
                                 language='yaml'
                                 title='openapi.yaml'
                             />
                             <p>
-                                From this, QueryFish generates a <code>GetPetVariables</code> type (with <code>petId: string</code>),
-                                a <code>GetPetResponse</code> type (the <code>Pet</code> interface), a <code>getPet</code>{' '}
-                                request function, and a <code>useGetPet</code> query hook — all fully typed.
+                                From it you get a <code>GetPetVariables</code> type (with <code>petId: string</code>), a{' '}
+                                <code>GetPetResponse</code> type (which is <code>Pet</code>), a <code>getPet</code>{' '}
+                                request function, and a <code>useGetPet</code> hook.
                             </p>
                             <p>
-                                Your spec&apos;s <code>summary</code> field becomes JSDoc on the generated hook, so you see
-                                the description when you hover over it in your editor.
+                                The operation&apos;s <code>summary</code> is added as a JSDoc comment, so it shows up
+                                when you hover the hook in your editor.
                             </p>
                         </section>
 
@@ -399,26 +389,33 @@ export function DocsPage() {
                         <section id='query-keys'>
                             <h2>Query Keys</h2>
                             <p>
-                                This is the detail that pays off daily. Most generators use operation names as query keys
-                                (e.g., <code>[&apos;getPet&apos;]</code>). QueryFish uses <strong>URL path segments</strong>{' '}
-                                instead (e.g., <code>[&apos;pets&apos;, &apos;&#123;petId&#125;&apos;]</code>).
+                                Query keys are built from the URL path. <code>GET /pets/&#123;petId&#125;</code> gets
+                                the key <code>[&apos;pets&apos;, &apos;&#123;petId&#125;&apos;]</code>, where a lot of
+                                generators would use the operation name (<code>[&apos;getPet&apos;]</code>).
                             </p>
                             <p>
-                                Why does this matter? Because React Query matches keys hierarchically. When you invalidate{' '}
-                                <code>[&apos;pets&apos;]</code>, it refetches every query whose key <em>starts with</em>{' '}
-                                <code>[&apos;pets&apos;]</code> — which is exactly the queries that hit <code>/pets/*</code>{' '}
-                                endpoints:
+                                React Query matches keys by prefix, so invalidating <code>[&apos;pets&apos;]</code> hits
+                                every query whose key starts with <code>&apos;pets&apos;</code>. With keys built from
+                                the path, that means every query for an endpoint under <code>/pets</code>:
                             </p>
                             <CodeBlock
                                 code={queryKeyCode}
                                 title='Cache invalidation'
                             />
+                            <p>
+                                With operation-name keys you&apos;d have to list each of those hooks yourself, and
+                                remember to add new ones as the API grows.
+                            </p>
 
                             <div className='callout-tip'>
                                 <p>
-                                    <strong>💡 Why this is better:</strong> With operation-name keys, you&apos;d need to
-                                    manually list every affected hook when invalidating. And you&apos;d need to update that
-                                    list every time you add a new endpoint. URL-based keys do this automatically.
+                                    <strong>Note:</strong> react-query-kit adds the variables to the end of the key, so
+                                    pet 123 is cached under{' '}
+                                    <code>
+                                        [&apos;pets&apos;, &apos;&#123;petId&#125;&apos;, &#123; petId: &apos;123&apos;
+                                        &#125;]
+                                    </code>
+                                    . Each pet still gets its own cache entry.
                                 </p>
                             </div>
                         </section>
@@ -429,46 +426,47 @@ export function DocsPage() {
                         <section id='pagination'>
                             <h2>Pagination (Infinite Queries)</h2>
                             <p>
-                                OpenAPI has <strong>no standard for pagination</strong>. Every API does it differently —
-                                cursor-based, offset-based, page-number-based. Generators that try to guess produce a hook
-                                that type-checks and looks right but silently fetches the same page forever.
+                                OpenAPI has no standard way to describe pagination, and APIs all do it a bit
+                                differently: cursors, offsets, page numbers. If a generator guesses wrong, you get a
+                                hook that compiles but stops after one page, or keeps fetching the same one.
                             </p>
                             <p>
-                                QueryFish takes a different approach: <strong>you explicitly opt in</strong> to infinite
-                                queries by telling it which parameter is the cursor and which response field contains the
-                                next page token.
+                                So QueryFish doesn&apos;t guess. For each endpoint that paginates, you tell it which
+                                query param takes the cursor and which response field holds the next one. You can do
+                                that in the spec or in the config.
                             </p>
 
-                            <h3>Opt in via the spec</h3>
-                            <p>Add an <code>x-queryfish-pagination</code> extension to any GET operation:</p>
+                            <h3>In the spec</h3>
+                            <p>
+                                Add <code>x-queryfish-pagination</code> to the operation:
+                            </p>
                             <CodeBlock
                                 code={paginationSpecCode}
                                 language='yaml'
-                                title='OpenAPI spec extension'
+                                title='openapi.yaml'
                             />
 
-                            <h3>Opt in via config</h3>
-                            <p>Or specify it in your config file. This is useful when you can&apos;t modify the spec:</p>
+                            <h3>In the config</h3>
+                            <p>Handy when the spec isn&apos;t yours to edit. If both are set, the config wins:</p>
                             <CodeBlock
                                 code={paginationConfigCode}
                                 title='queryfish.config.ts'
                             />
 
-                            <h3>Using the generated hook</h3>
+                            <h3>Using the hook</h3>
                             <p>
-                                The generated <code>useListPetsInfinite</code> hook handles the cursor automatically. The
-                                cursor parameter is excluded from your variables type so you can&apos;t accidentally pass it:
+                                You get a <code>useListPetsInfinite</code> hook in <code>infiniteQueries.ts</code>. The
+                                cursor isn&apos;t part of its variables, because the hook passes it for you:
                             </p>
                             <CodeBlock
                                 code={paginationUsageCode}
-                                title='Using infinite query hooks'
+                                title='Infinite queries'
                             />
 
                             <div className='callout-tip'>
                                 <p>
-                                    <strong>💡 No pagination needed?</strong> If none of your endpoints need infinite
-                                    queries, simply don&apos;t add any pagination config. The <code>infiniteQueries.ts</code>{' '}
-                                    file won&apos;t be generated at all.
+                                    <strong>Note:</strong> if nothing opts in, <code>infiniteQueries.ts</code>{' '}
+                                    isn&apos;t created.
                                 </p>
                             </div>
                         </section>
@@ -479,8 +477,7 @@ export function DocsPage() {
                         <section id='configuration'>
                             <h2>Configuration Reference</h2>
                             <p>
-                                All configuration goes in a <code>queryfish.config.ts</code> file at your project root.
-                                Here&apos;s every option with its type, default, and what it does:
+                                Options for <code>queryfish.config.ts</code>:
                             </p>
 
                             <table className='docs-table mt-6'>
@@ -501,10 +498,7 @@ export function DocsPage() {
                                         <td>
                                             <em>required</em>
                                         </td>
-                                        <td>
-                                            Path or URL to your OpenAPI document. Supports YAML, JSON, OpenAPI 3.0, 3.1,
-                                            and Swagger 2.0.
-                                        </td>
+                                        <td>Path or URL to the spec. YAML or JSON; OpenAPI 3.0, 3.1 or Swagger 2.0.</td>
                                     </tr>
                                     <tr>
                                         <td>
@@ -515,8 +509,7 @@ export function DocsPage() {
                                             <em>required</em>
                                         </td>
                                         <td>
-                                            Directory where generated files will be written. Created automatically if it
-                                            doesn&apos;t exist.
+                                            Folder to write the generated files to. Created if it doesn&apos;t exist.
                                         </td>
                                     </tr>
                                     <tr>
@@ -528,8 +521,9 @@ export function DocsPage() {
                                             <code>&apos;./client&apos;</code>
                                         </td>
                                         <td>
-                                            Module that exports your HTTP client. Can be a relative path (resolved from
-                                            project root) or a package specifier like <code>@/lib/api</code>.
+                                            File that exports your HTTP client. Relative paths are resolved from the
+                                            config file&apos;s folder. Aliases like <code>@/lib/api</code> are left as
+                                            they are.
                                         </td>
                                     </tr>
                                     <tr>
@@ -541,8 +535,8 @@ export function DocsPage() {
                                             <code>undefined</code>
                                         </td>
                                         <td>
-                                            Map of path → pagination config. Set a path to <code>false</code> to suppress
-                                            pagination that was opted in via the spec extension.
+                                            Infinite query settings, keyed by path. Set a path to <code>false</code> to
+                                            turn off an opt-in that comes from the spec.
                                         </td>
                                     </tr>
                                     <tr>
@@ -554,9 +548,9 @@ export function DocsPage() {
                                             <code>true</code>
                                         </td>
                                         <td>
-                                            Run Prettier on the generated output using your project&apos;s{' '}
-                                            <code>.prettierrc</code>. Disable with <code>false</code> or the{' '}
-                                            <code>--no-format</code> CLI flag.
+                                            Format the output with Prettier, using your project&apos;s config. The{' '}
+                                            <code>--no-format</code> flag does the same as setting it to{' '}
+                                            <code>false</code>.
                                         </td>
                                     </tr>
                                     <tr>
@@ -568,8 +562,8 @@ export function DocsPage() {
                                             <code>true</code>
                                         </td>
                                         <td>
-                                            Generate an <code>index.ts</code> that re-exports everything from the other
-                                            files. Useful for <code>import &#123; ... &#125; from &apos;./api&apos;</code>.
+                                            Write an <code>index.ts</code> that re-exports the other files, so you can{' '}
+                                            <code>import &#123; ... &#125; from &apos;./api&apos;</code>.
                                         </td>
                                     </tr>
                                 </tbody>
@@ -581,10 +575,7 @@ export function DocsPage() {
                         {/* ─── CLI ─── */}
                         <section id='cli'>
                             <h2>CLI Reference</h2>
-                            <p>
-                                The CLI is the primary way to run QueryFish. All options can also be set in the config
-                                file — CLI flags take precedence when both are specified.
-                            </p>
+                            <p>Flags override the matching options in the config file.</p>
                             <CodeBlock
                                 code='npx queryfish generate [options]'
                                 language='bash'
@@ -604,8 +595,8 @@ export function DocsPage() {
                                             <code>-c, --config &lt;path&gt;</code>
                                         </td>
                                         <td>
-                                            Path to a config file. Defaults to <code>queryfish.config.ts</code> in your
-                                            project root.
+                                            Config file to use. Without it, QueryFish looks for{' '}
+                                            <code>queryfish.config.*</code> in the current directory.
                                         </td>
                                     </tr>
                                     <tr>
@@ -613,8 +604,7 @@ export function DocsPage() {
                                             <code>-i, --input &lt;spec&gt;</code>
                                         </td>
                                         <td>
-                                            Path or URL to your OpenAPI document. Overrides the config file&apos;s{' '}
-                                            <code>input</code>.
+                                            Path or URL to the spec. Overrides <code>input</code>.
                                         </td>
                                     </tr>
                                     <tr>
@@ -622,7 +612,7 @@ export function DocsPage() {
                                             <code>-o, --output &lt;dir&gt;</code>
                                         </td>
                                         <td>
-                                            Output directory. Overrides the config file&apos;s <code>output</code>.
+                                            Output folder. Overrides <code>output</code>.
                                         </td>
                                     </tr>
                                     <tr>
@@ -630,8 +620,7 @@ export function DocsPage() {
                                             <code>--client &lt;module&gt;</code>
                                         </td>
                                         <td>
-                                            Module exporting your HTTP client. Overrides the config file&apos;s{' '}
-                                            <code>client</code>.
+                                            File that exports your HTTP client. Overrides <code>client</code>.
                                         </td>
                                     </tr>
                                     <tr>
@@ -639,8 +628,7 @@ export function DocsPage() {
                                             <code>--dry-run</code>
                                         </td>
                                         <td>
-                                            Show what files would be created or changed, but don&apos;t write anything to
-                                            disk. Useful for CI checks.
+                                            List the files that would be created or changed, without writing anything.
                                         </td>
                                     </tr>
                                     <tr>
@@ -648,30 +636,27 @@ export function DocsPage() {
                                             <code>--watch</code>
                                         </td>
                                         <td>
-                                            Watch the spec file for changes and regenerate automatically. Great for
-                                            development.
+                                            Regenerate when the spec or config file changes. Doesn&apos;t apply when the
+                                            input is a URL.
                                         </td>
                                     </tr>
                                     <tr>
                                         <td>
                                             <code>--no-format</code>
                                         </td>
-                                        <td>Skip Prettier formatting. Useful if Prettier isn&apos;t set up in your project.</td>
+                                        <td>Skip Prettier formatting.</td>
                                     </tr>
                                     <tr>
                                         <td>
                                             <code>--silent</code>
                                         </td>
-                                        <td>Suppress all output except errors.</td>
+                                        <td>Only print errors.</td>
                                     </tr>
                                 </tbody>
                             </table>
 
                             <h3>Error messages</h3>
-                            <p>
-                                When something goes wrong, QueryFish points at the exact location in your spec so you
-                                know where to look:
-                            </p>
+                            <p>If something in the spec is broken, the error says where:</p>
                             <CodeBlock
                                 code={`error: cannot resolve schema
   at paths./pets.get.responses.200
@@ -690,18 +675,15 @@ export function DocsPage() {
                         {/* ─── Generated Files ─── */}
                         <section id='generated-files'>
                             <h2>What Gets Generated</h2>
-                            <p>
-                                QueryFish generates up to six files. Each file has a single responsibility, and
-                                they&apos;re designed to be committed to your repo and reviewed in pull requests:
-                            </p>
+                            <p>QueryFish writes up to six files:</p>
                             <CodeBlock
                                 code={`src/api/
-├── types.ts           # TypeScript interfaces and type aliases
-├── requests.ts        # Plain async functions (usable without React)
-├── queries.ts         # createQuery hook factories (GET, HEAD)
-├── mutations.ts       # createMutation hook factories (POST, PUT, PATCH, DELETE)
-├── infiniteQueries.ts # createInfiniteQuery factories (only if opted in)
-└── index.ts           # Barrel file that re-exports everything`}
+├── types.ts           # interfaces and type aliases
+├── requests.ts        # plain async functions (no React)
+├── queries.ts         # createQuery hooks (GET, HEAD)
+├── mutations.ts       # createMutation hooks (POST, PUT, PATCH, DELETE)
+├── infiniteQueries.ts # createInfiniteQuery hooks (only if you opt in)
+└── index.ts           # re-exports everything`}
                                 language='text'
                                 title='Output structure'
                                 showCopy={false}
@@ -711,7 +693,7 @@ export function DocsPage() {
                                 <thead>
                                     <tr>
                                         <th>File</th>
-                                        <th>What it contains</th>
+                                        <th>What&apos;s in it</th>
                                         <th>When you&apos;d import it</th>
                                     </tr>
                                 </thead>
@@ -720,33 +702,37 @@ export function DocsPage() {
                                         <td>
                                             <code>types.ts</code>
                                         </td>
-                                        <td>Interfaces from your schemas, plus Variables and Response types for each operation</td>
-                                        <td>When you need to type a prop or function parameter</td>
+                                        <td>
+                                            Interfaces from your schemas, plus Variables and Response types for each
+                                            operation
+                                        </td>
+                                        <td>To type a prop or a function parameter</td>
                                     </tr>
                                     <tr>
                                         <td>
                                             <code>requests.ts</code>
                                         </td>
-                                        <td>Standalone async functions that call your client — no React dependency</td>
-                                        <td>In server-side code, scripts, or tests</td>
+                                        <td>Plain async functions that call your client. No React involved.</td>
+                                        <td>In server code, scripts or tests</td>
                                     </tr>
                                     <tr>
                                         <td>
                                             <code>queries.ts</code>
                                         </td>
                                         <td>
-                                            <code>useX</code> hooks created with <code>createQuery</code> from react-query-kit
+                                            <code>useX</code> hooks made with react-query-kit&apos;s{' '}
+                                            <code>createQuery</code>
                                         </td>
-                                        <td>In React components for GET requests</td>
+                                        <td>In components, for GET requests</td>
                                     </tr>
                                     <tr>
                                         <td>
                                             <code>mutations.ts</code>
                                         </td>
                                         <td>
-                                            <code>useX</code> hooks created with <code>createMutation</code>
+                                            <code>useX</code> hooks made with <code>createMutation</code>
                                         </td>
-                                        <td>In React components for POST/PUT/PATCH/DELETE</td>
+                                        <td>In components, for POST, PUT, PATCH and DELETE</td>
                                     </tr>
                                     <tr>
                                         <td>
@@ -755,15 +741,15 @@ export function DocsPage() {
                                         <td>
                                             <code>useXInfinite</code> hooks for paginated endpoints
                                         </td>
-                                        <td>Only created if you opt in to pagination</td>
+                                        <td>Only exists if you opt in to pagination</td>
                                     </tr>
                                     <tr>
                                         <td>
                                             <code>index.ts</code>
                                         </td>
-                                        <td>Re-exports from all other files</td>
+                                        <td>Re-exports the other files</td>
                                         <td>
-                                            Convenience: <code>import &#123; ... &#125; from &apos;./api&apos;</code>
+                                            If you&apos;d rather import everything from <code>./api</code>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -771,9 +757,8 @@ export function DocsPage() {
 
                             <div className='callout-tip'>
                                 <p>
-                                    <strong>💡 Commit the generated code.</strong> It&apos;s meant to be reviewed in PRs.
-                                    The output is formatted with your Prettier config and uses readable variable names,
-                                    so reviewers can see exactly what changed when the spec is updated.
+                                    <strong>Tip:</strong> commit the generated files. When the spec changes, the PR diff
+                                    shows exactly which types and hooks changed.
                                 </p>
                             </div>
                         </section>
@@ -784,15 +769,14 @@ export function DocsPage() {
                         <section id='edge-cases'>
                             <h2>Specs It Handles</h2>
                             <p>
-                                Real-world OpenAPI specs are messy. They have recursive schemas, missing fields,
-                                duplicate names, and reserved words. QueryFish handles all of these — each case has a
-                                regression test to make sure it never breaks:
+                                Real-world specs tend to be messy. These are the cases QueryFish handles, and each one
+                                has a test so it stays fixed:
                             </p>
                             <table className='docs-table mt-4'>
                                 <thead>
                                     <tr>
-                                        <th>Edge case</th>
-                                        <th>What QueryFish does</th>
+                                        <th>Case</th>
+                                        <th>What happens</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -801,26 +785,32 @@ export function DocsPage() {
                                             <strong>Recursive schemas</strong>
                                         </td>
                                         <td>
-                                            Emits named references instead of inlining. <code>Comment.replies: Comment[]</code>{' '}
-                                            works correctly, including mutually recursive types.
+                                            The type is referenced by name instead of inlined, so{' '}
+                                            <code>Comment.replies</code> becomes <code>Comment[]</code>. Mutually
+                                            recursive types work too.
                                         </td>
                                     </tr>
                                     <tr>
                                         <td>
-                                            <strong>Missing <code>operationId</code></strong>
+                                            <strong>
+                                                Missing <code>operationId</code>
+                                            </strong>
                                         </td>
                                         <td>
-                                            Derives a name from the HTTP method + path. For example, <code>GET /pets/&#123;petId&#125;/toys</code>{' '}
-                                            becomes <code>getPetsByPetIdToys</code>.
+                                            A name is built from the method and path:{' '}
+                                            <code>GET /pets/&#123;petId&#125;/toys</code> becomes{' '}
+                                            <code>getPetsByPetIdToys</code>.
                                         </td>
                                     </tr>
                                     <tr>
                                         <td>
-                                            <strong>Duplicate <code>operationId</code></strong>
+                                            <strong>
+                                                Duplicate <code>operationId</code>
+                                            </strong>
                                         </td>
                                         <td>
-                                            Appends a numeric suffix (<code>duplicated</code>, <code>duplicated2</code>) and
-                                            prints a warning so you can fix the spec.
+                                            Later ones get a number on the end (<code>duplicated</code>,{' '}
+                                            <code>duplicated2</code>) and you get a warning so you can fix the spec.
                                         </td>
                                     </tr>
                                     <tr>
@@ -828,8 +818,8 @@ export function DocsPage() {
                                             <strong>Reserved words</strong>
                                         </td>
                                         <td>
-                                            An operation named <code>delete</code> becomes <code>delete_</code> to avoid
-                                            conflicts with JavaScript keywords.
+                                            An operation called <code>delete</code> becomes <code>delete_</code>, since{' '}
+                                            <code>delete</code> is a JavaScript keyword.
                                         </td>
                                     </tr>
                                     <tr>
@@ -838,7 +828,7 @@ export function DocsPage() {
                                         </td>
                                         <td>
                                             Names like <code>filter[status]</code> and <code>X-Request-Id</code> are
-                                            properly quoted in the generated types.
+                                            quoted in the generated types.
                                         </td>
                                     </tr>
                                     <tr>
@@ -846,8 +836,8 @@ export function DocsPage() {
                                             <strong>Schema composition</strong>
                                         </td>
                                         <td>
-                                            <code>allOf</code> → TypeScript intersection (<code>&amp;</code>),{' '}
-                                            <code>oneOf</code>/<code>anyOf</code> → union (<code>|</code>).
+                                            <code>allOf</code> becomes an intersection (<code>&amp;</code>),{' '}
+                                            <code>oneOf</code> and <code>anyOf</code> become a union (<code>|</code>).
                                         </td>
                                     </tr>
                                     <tr>
@@ -855,8 +845,8 @@ export function DocsPage() {
                                             <strong>Nullability</strong>
                                         </td>
                                         <td>
-                                            Handles both OpenAPI 3.0&apos;s <code>nullable: true</code> and 3.1&apos;s{' '}
-                                            <code>type: [&apos;string&apos;, &apos;null&apos;]</code> correctly.
+                                            Both OpenAPI 3.0&apos;s <code>nullable: true</code> and 3.1&apos;s{' '}
+                                            <code>type: [&apos;string&apos;, &apos;null&apos;]</code> work.
                                         </td>
                                     </tr>
                                     <tr>
@@ -864,8 +854,8 @@ export function DocsPage() {
                                             <strong>Empty responses</strong>
                                         </td>
                                         <td>
-                                            A <code>204 No Content</code> response maps to <code>void</code>, not an empty
-                                            object.
+                                            A <code>204 No Content</code> response is typed as <code>void</code>, not an
+                                            empty object.
                                         </td>
                                     </tr>
                                     <tr>
@@ -873,8 +863,8 @@ export function DocsPage() {
                                             <strong>Swagger 2.0</strong>
                                         </td>
                                         <td>
-                                            Supports the older <code>definitions</code> key, <code>in: body</code>{' '}
-                                            parameters, and response schemas.
+                                            The older <code>definitions</code> key, <code>in: body</code> parameters and
+                                            response schemas all work.
                                         </td>
                                     </tr>
                                 </tbody>

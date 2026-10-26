@@ -2,67 +2,69 @@
 
 <img src="./assets/logo.png" alt="QueryFish" width="100%" />
 
-**Hook your API. Typed, straight from the spec.**
+**Generate typed React Query hooks from your OpenAPI spec.**
 
-Turn an OpenAPI document into fully typed [React Query](https://tanstack.com/query)
-hooks powered by [react-query-kit](https://github.com/HuolalaTech/react-query-kit) —
-with zero runtime and no hand-written client code.
+QueryFish reads an OpenAPI or Swagger document and writes the TypeScript types, request functions and
+[react-query-kit](https://github.com/HuolalaTech/react-query-kit) hooks for
+[TanStack Query](https://tanstack.com/query). It's a dev dependency only, and you keep your own HTTP client.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen.svg)](https://nodejs.org)
 [![Types](https://img.shields.io/badge/types-included-blue.svg)](https://www.typescriptlang.org/)
 
-[Quick start](#-quick-start) · [How it works](#-how-it-works) · [Configuration](#%EF%B8%8F-configuration) · [Example app](./examples/petstore-react) · [Docs](./docs)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Example app](./examples/petstore-react) · [Docs](./docs)
 
 </div>
 
 ---
 
-## Why QueryFish?
+## Why
 
-You already describe your API once, in OpenAPI. Writing the fetch functions, the
-TypeScript types, and the React Query hooks by hand means describing it three
-more times — and keeping all four in sync forever.
+If you have an OpenAPI spec, you've already described your API once. Writing the fetch functions, types and React Query
+hooks by hand means describing it three more times, and then keeping all of them in sync every time the API changes.
 
-QueryFish generates the other three.
+QueryFish generates those three from the spec, so the spec is the only thing you maintain.
 
 ```diff
 - const { data } = useQuery({
 -   queryKey: ['pet', petId],
 -   queryFn: () => fetch(`/api/pets/${petId}`).then(r => r.json()),
 - });
-- // data: any — and the key is whatever you remembered to type
+- // data is `any`, and the key is whatever you typed
 
 + const { data } = useGetPet({ variables: { petId } });
-+ // data: Pet — petId is required, typos don't compile
++ // data is `Pet`, and leaving out petId is a type error
 ```
 
-**What makes it different:**
+A few things worth knowing:
 
-- 🎯 **It never guesses.** Where OpenAPI has no standard — pagination, notably —
-  QueryFish requires an explicit opt-in instead of inferring. A wrong guess that
-  compiles is worse than no feature.
-- 🔑 **Query keys mirror your URLs**, so one call invalidates a whole resource
-  tree instead of a single endpoint.
-- 🪶 **Zero runtime.** QueryFish is a `devDependency`. Nothing it publishes ends
-  up in your bundle.
-- ✅ **The output is verified to compile**, not assumed to — CI type-checks
-  generated code against the real react-query-kit on every run.
-- 🧬 **Handles specs that break other generators**: recursive schemas, duplicate
-  and missing `operationId`s, reserved words, `allOf`/`oneOf`, Swagger 2.0.
+- **Query keys follow your URLs.** `GET /pets/{petId}` gets the key `['pets', '{petId}']`, so invalidating `['pets']`
+  refetches everything under `/pets` in one call.
+- **Pagination is opt-in.** OpenAPI has no standard way to describe pagination, so QueryFish doesn't try to detect it.
+  You tell it which endpoints paginate and how.
+- **No runtime.** The generated code imports react-query-kit, TanStack Query and your own client module. Nothing from
+  QueryFish ends up in your bundle.
+- **The output is type-checked.** The test suite runs `tsc` over the generated code for every fixture, against the real
+  react-query-kit types.
+- **Messy specs work.** Recursive schemas, missing or duplicate `operationId`s, reserved words, `allOf`/`oneOf` and
+  Swagger 2.0 are all handled.
 
 ---
 
-## 🚀 Quick start
+## Quick start
 
-**1. Install**
+### 1. Install
 
 ```bash
-npm install queryfish --save-dev
+npm install --save-dev queryfish
 ```
 
-**2. Write your client** — this is yours, so auth and interceptors stay in your
-code:
+The generated hooks import `@tanstack/react-query` and `react-query-kit`, so your app needs both installed.
+
+### 2. Add a client
+
+Generated request functions call a `client` that you export from your own code. Auth headers, interceptors and the base
+URL all live there. An axios instance works as-is:
 
 ```ts
 // src/api/client.ts
@@ -71,11 +73,10 @@ import axios from 'axios'
 export const client = axios.create({ baseURL: '/api' })
 ```
 
-<sub>An axios instance works as-is. Prefer `fetch`? See the
-[worked example](./examples/petstore-react/src/client.ts) — about 40 lines, no
-dependencies.</sub>
+If you'd rather use `fetch`, the example app has a [fetch-based client](./examples/petstore-react/src/client.ts) in
+about 40 lines.
 
-**3. Configure**
+### 3. Add a config file
 
 ```ts
 // queryfish.config.ts
@@ -88,7 +89,7 @@ export default defineConfig({
 })
 ```
 
-**4. Generate**
+### 4. Generate
 
 ```bash
 npx queryfish generate
@@ -103,25 +104,24 @@ npx queryfish generate
 ✓ Generated 6 operations → src/api
 ```
 
-**5. Use it**
+### 5. Use the hooks
 
 ```tsx
 import { useGetPet } from './api/queries'
-import { useCreatePet } from './api/mutations'
 
 function Pet({ petId }: { petId: string }) {
     const { data, isPending } = useGetPet({ variables: { petId } })
 
     if (isPending) return <Spinner />
-    return <h1>{data.name}</h1> // data is `Pet`, fully typed
+    return <h1>{data.name}</h1> // data is typed as Pet
 }
 ```
 
 ---
 
-## 🔍 How it works
+## How it works
 
-Give it a spec:
+Say your spec has this endpoint:
 
 ```yaml
 paths:
@@ -141,7 +141,7 @@ paths:
                             schema: { $ref: '#/components/schemas/Pet' }
 ```
 
-Get back four files of ordinary, readable TypeScript:
+QueryFish writes plain TypeScript, split into a few files:
 
 <table>
 <tr><td width="50%">
@@ -203,33 +203,30 @@ export const useCreatePet = createMutation<CreatePetResponse, CreatePetVariables
 </td></tr>
 </table>
 
-Your spec's `summary` becomes JSDoc, so the description shows up on hover in
-your editor.
+The operation's `summary` is added as a JSDoc comment, so you see it when you hover a hook in your editor.
 
-### Query keys mirror your URLs
+### Query keys follow your URLs
 
-This is the detail that pays off daily. react-query-kit appends `variables`
-automatically, so `['pets', '{petId}']` becomes
-`['pets', '{petId}', { petId: '123' }]` at runtime — cache entries stay separate
-per pet. But because the _prefix_ is the URL path, one call clears everything
-about a resource:
+react-query-kit adds `variables` to the end of the key for you, so `['pets', '{petId}']` turns into
+`['pets', '{petId}', { petId: '123' }]` at runtime and each pet gets its own cache entry. Because the start of the key is
+the URL path, you can invalidate everything about a resource at once:
 
 ```ts
-// After creating, updating, or deleting a pet:
+// after creating, updating or deleting a pet
 queryClient.invalidateQueries({ queryKey: ['pets'] })
-// ↑ refetches /pets, /pets/{petId}, /pets/{petId}/toys — all of it
+// covers /pets, /pets/{petId}, /pets/{petId}/toys, ...
 ```
 
-With operation-name keys you would have to list every affected hook by hand, and
-update that list whenever an endpoint is added.
+If the keys were based on operation names instead, you'd have to list every affected hook yourself and remember to
+update that list when an endpoint is added.
 
-### Infinite queries — opt in, never inferred
+### Infinite queries are opt-in
 
-OpenAPI has no standard for pagination. Generators that guess produce the worst
-kind of bug: a hook that type-checks, looks right, and then silently fetches the
-same page forever.
+OpenAPI doesn't describe pagination, and APIs do it in lots of different ways: cursors, page numbers, offsets, `Link`
+headers. A generator that guesses wrong gives you a hook that compiles fine but stops after one page, or keeps fetching
+the same one.
 
-So QueryFish asks. Either in config:
+So QueryFish only generates infinite queries for the endpoints you point it at. You can do that in the config:
 
 ```ts
 pagination: {
@@ -237,7 +234,7 @@ pagination: {
 }
 ```
 
-or in the spec itself:
+or with an extension in the spec:
 
 ```yaml
 x-queryfish-pagination:
@@ -245,10 +242,12 @@ x-queryfish-pagination:
     nextField: nextCursor
 ```
 
+Either way, you get this:
+
 ```ts
 export const useListPetsInfinite = createInfiniteQuery<
     ListPetsResponse,
-    Omit<ListPetsVariables, 'cursor'>, // ← cursor comes from pageParam
+    Omit<ListPetsVariables, 'cursor'>, // the hook fills in cursor from pageParam
     Error,
     string | undefined
 >({
@@ -259,12 +258,12 @@ export const useListPetsInfinite = createInfiniteQuery<
 })
 ```
 
-Opt in to nothing and `infiniteQueries.ts` is never written at all.
-<sub>[Full reasoning →](./docs/adr/0005-opt-in-pagination.md)</sub>
+If nothing opts in, `infiniteQueries.ts` isn't created. The reasoning is in
+[ADR 0005](./docs/adr/0005-opt-in-pagination.md).
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ```ts
 import { defineConfig } from 'queryfish'
@@ -292,7 +291,7 @@ export default defineConfig({
 })
 ```
 
-Config files may be `.ts`, `.mts`, `.js`, `.mjs`, or `.json`.
+The config file can be `.ts`, `.mts`, `.js`, `.mjs` or `.json`.
 
 ### CLI
 
@@ -300,18 +299,18 @@ Config files may be `.ts`, `.mts`, `.js`, `.mjs`, or `.json`.
 queryfish generate [options]
 ```
 
-| Option                | Description                             |
-| --------------------- | --------------------------------------- |
-| `-c, --config <path>` | Path to config file                     |
-| `-i, --input <spec>`  | Path or URL to the OpenAPI document     |
-| `-o, --output <dir>`  | Output directory                        |
-| `--client <module>`   | Module exporting the HTTP client        |
-| `--dry-run`           | Report what would change, write nothing |
-| `--watch`             | Regenerate when the spec changes        |
-| `--no-format`         | Skip Prettier formatting                |
-| `--silent`            | Suppress output                         |
+| Option                | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `-c, --config <path>` | Path to config file                             |
+| `-i, --input <spec>`  | Path or URL to the OpenAPI document             |
+| `-o, --output <dir>`  | Output directory                                |
+| `--client <module>`   | Module exporting the HTTP client                |
+| `--dry-run`           | List what would change without writing anything |
+| `--watch`             | Regenerate when the spec or config changes      |
+| `--no-format`         | Skip Prettier formatting                        |
+| `--silent`            | Only print errors                               |
 
-CLI flags override the config file. Errors point at the exact spot in your spec:
+Flags override values from the config file. If something in the spec is broken, the error tells you where:
 
 ```
 error: cannot resolve schema
@@ -323,59 +322,57 @@ error: cannot resolve schema
 
 ---
 
-## 📂 What gets generated
+## What gets generated
 
 ```
 src/api/
 ├── types.ts           # Interfaces, enums, request/response types
-├── requests.ts        # Plain async functions — usable without React
-├── queries.ts         # createQuery factories (GET, HEAD)
-├── mutations.ts       # createMutation factories (POST, PUT, PATCH, DELETE)
-├── infiniteQueries.ts # createInfiniteQuery factories — only if opted in
-└── index.ts           # Barrel re-export
+├── requests.ts        # Plain async functions, usable without React
+├── queries.ts         # createQuery hooks (GET, HEAD)
+├── mutations.ts       # createMutation hooks (POST, PUT, PATCH, DELETE)
+├── infiniteQueries.ts # createInfiniteQuery hooks, only if you opt in
+└── index.ts           # Re-exports everything
 ```
 
-Output is formatted with **your** Prettier config, so it matches the rest of
-your codebase rather than fighting it. Commit it — it's meant to be read and
-reviewed.
+The output is formatted with your project's Prettier config. It's meant to be committed: when the spec changes, the diff
+shows exactly which types and hooks changed.
 
 ---
 
-## 🧬 Specs it handles
+## Specs it handles
 
-Real specs break naive generators. These are covered, with a
-[regression fixture](./test/fixtures/edge-cases.yaml) for each:
+Specs in the wild have a lot of odd corners. These are handled, and each one has a case in
+[`edge-cases.yaml`](./test/fixtures/edge-cases.yaml) so it stays fixed:
 
-|                             |                                                                          |
-| --------------------------- | ------------------------------------------------------------------------ |
-| **Recursive schemas**       | `Comment.replies: Comment[]` and mutually recursive types emit correctly |
-| **Missing `operationId`**   | Derived from method + path (`getPetsByPetIdToys`)                        |
-| **Duplicate `operationId`** | Deterministically suffixed, with a warning                               |
-| **Reserved words**          | `delete` → `delete_`                                                     |
-| **Odd parameter names**     | `filter[status]`, `X-Request-Id` quoted correctly                        |
-| **Composition**             | `allOf` → intersection, `oneOf`/`anyOf` → union                          |
-| **Nullability**             | Both `nullable: true` and 3.1's `type: ['string', 'null']`               |
-| **Empty responses**         | `204` → `void`                                                           |
-| **Swagger 2.0**             | `definitions`, `in: body` parameters, response schemas                   |
+|                             |                                                                  |
+| --------------------------- | ---------------------------------------------------------------- |
+| **Recursive schemas**       | `Comment.replies: Comment[]`, including mutually recursive types |
+| **Missing `operationId`**   | Built from the method and path (`getPetsByPetIdToys`)            |
+| **Duplicate `operationId`** | Gets a numeric suffix, and you get a warning                     |
+| **Reserved words**          | `delete` becomes `delete_`                                       |
+| **Odd parameter names**     | `filter[status]` and `X-Request-Id` are quoted                   |
+| **Composition**             | `allOf` becomes an intersection, `oneOf`/`anyOf` a union         |
+| **Nullability**             | Both 3.0's `nullable: true` and 3.1's `type: ['string', 'null']` |
+| **Empty responses**         | `204` becomes `void`                                             |
+| **Swagger 2.0**             | `definitions`, `in: body` parameters and response schemas        |
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-|                                          |                                              |
-| ---------------------------------------- | -------------------------------------------- |
-| [Example app](./examples/petstore-react) | A React app using generated hooks end to end |
-| [Architecture](./docs/architecture.md)   | How the generator works, stage by stage      |
-| [Decisions (ADRs)](./docs/adr)           | Why things are the way they are              |
-| [Contributing](./CONTRIBUTING.md)        | Clone to merged PR                           |
-| [Conventions](./docs/conventions)        | Commits, code style, versioning              |
+|                                          |                                                |
+| ---------------------------------------- | ---------------------------------------------- |
+| [Example app](./examples/petstore-react) | A small React app built on the generated hooks |
+| [Architecture](./docs/architecture.md)   | How the generator works, stage by stage        |
+| [Decisions (ADRs)](./docs/adr)           | Why things are the way they are                |
+| [Contributing](./CONTRIBUTING.md)        | Setup, tests and how to send a PR              |
+| [Conventions](./docs/conventions)        | Commits, code style, versioning                |
 
+---
 
+## Contributing
 
-## 🤝 Contributing
-
-Contributions are genuinely welcome, and the project is set up so a first PR
-doesn't require asking anyone anything.
+Contributions are welcome. Getting set up:
 
 ```bash
 git clone https://github.com/ravitejas-tech/queryfish.git
@@ -384,21 +381,15 @@ npm install
 npm test
 ```
 
-Start with [CONTRIBUTING.md](./CONTRIBUTING.md), then
-[docs/architecture.md](./docs/architecture.md). If something looks wrong in the
-code, check the [ADRs](./docs/adr) first — it may be deliberate, and the
-reasoning plus the rejected alternatives are written down.
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) first, then [docs/architecture.md](./docs/architecture.md). If some code looks
+wrong, check the [ADRs](./docs/adr) before changing it. A few of the odd-looking choices were made on purpose, and the
+reasons are written down there.
 
-Good first contributions: add a spec shape to
-[`edge-cases.yaml`](./test/fixtures/edge-cases.yaml) that breaks the generator,
-or improve an error message.
+Good places to start: add a spec that breaks the generator to [`edge-cases.yaml`](./test/fixtures/edge-cases.yaml), or
+make an error message clearer.
 
 ---
 
-## 📄 License
+## License
 
 [MIT](./LICENSE)
-
-<div align="center">
-<sub>Built for teams who'd rather write features than fetch functions.</sub>
-</div>

@@ -16,7 +16,7 @@ export function Navbar() {
         <nav className='glass-nav fixed top-0 left-0 right-0 z-50'>
             <div className='mx-auto max-w-7xl px-4 sm:px-6 lg:px-8'>
                 <div className='flex h-16 items-center justify-between'>
-                    {/* Logo — uses the actual icon.png */}
+                    {/* Logo */}
                     <Link
                         to='/'
                         className='flex items-center gap-2.5 text-lg font-bold text-text-primary no-underline'>
@@ -31,7 +31,7 @@ export function Navbar() {
                         </span>
                     </Link>
 
-                    {/* Desktop links — minimal style with bottom indicator */}
+                    {/* Desktop links */}
                     <div className='hidden items-center gap-0.5 md:flex'>
                         {navLinks.map((link) => {
                             const isActive = location.pathname === link.to

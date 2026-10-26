@@ -5,9 +5,9 @@ body:
     - type: markdown
       attributes:
           value: |
-              QueryFish deliberately does one thing well: OpenAPI → React Query Kit
-              factories. Proposals that fit that scope are much more likely to land —
-              see the design principles in CONTRIBUTING.md.
+              QueryFish tries to do one thing: turn OpenAPI specs into React Query
+              hooks. Ideas that fit that are much more likely to be accepted. The
+              design principles in CONTRIBUTING.md explain what we're aiming for.
 
     - type: textarea
       id: problem

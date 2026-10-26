@@ -3,40 +3,34 @@ import { CodeBlock, InstallSnippet } from '../components/code-block'
 
 const features = [
     {
-        icon: '🎯',
-        title: 'Never Guesses',
+        title: 'Query keys follow your URLs',
         description:
-            'Where OpenAPI has no standard — pagination, notably — QueryFish requires an explicit opt-in instead of inferring. A wrong guess that compiles is worse than no feature.',
+            "GET /pets/{petId} gets the key ['pets', '{petId}']. Invalidate ['pets'] after a mutation and every query under /pets refetches, so there's no list of hooks to keep up to date.",
     },
     {
-        icon: '🔑',
-        title: 'Smart Query Keys',
+        title: 'Pagination is opt-in',
         description:
-            'Query keys mirror your URLs, so one call invalidates a whole resource tree instead of a single endpoint. No manual key management.',
+            "OpenAPI doesn't say how an endpoint paginates, so QueryFish doesn't guess. You name the cursor param and the field with the next cursor, and it writes an infinite query for that endpoint.",
     },
     {
-        icon: '🪶',
-        title: 'Zero Runtime',
+        title: 'Nothing added to your bundle',
         description:
-            'QueryFish is a devDependency. Nothing it publishes ends up in your bundle. Pure codegen, pure types.',
+            'QueryFish is a dev dependency. The generated code imports react-query-kit, TanStack Query and your own HTTP client, and nothing from QueryFish.',
     },
     {
-        icon: '✅',
-        title: 'Verified Output',
+        title: 'Output is type-checked',
         description:
-            'Generated code is verified to compile — not assumed to. CI type-checks output against the real react-query-kit on every run.',
+            'The test suite runs tsc over the generated code against the real react-query-kit types, so a type error in the output fails our CI instead of your build.',
     },
     {
-        icon: '🧬',
-        title: 'Handles Real Specs',
+        title: 'Works with messy specs',
         description:
-            'Recursive schemas, duplicate operationIds, reserved words, allOf/oneOf, Swagger 2.0 — all covered with regression tests.',
+            'Recursive schemas, missing or duplicate operationIds, reserved words, allOf/oneOf and Swagger 2.0 are all handled, and each one has a test case.',
     },
     {
-        icon: '⚡',
-        title: 'Watch Mode',
+        title: 'Watch mode',
         description:
-            'Change your spec, see regenerated hooks instantly. Works with local files and supports your existing Prettier config.',
+            'Run it with --watch and the hooks are regenerated whenever you save the spec or the config. Output goes through your Prettier config.',
     },
 ]
 
@@ -46,15 +40,14 @@ const beforeCode = `const { data } = useQuery({
     fetch(\`/api/pets/\${petId}\`)
       .then(r => r.json()),
 })
-// data: any — and the key is
-// whatever you remembered to type`
+// data is any, and the key is
+// whatever you typed`
 
 const afterCode = `const { data } = useGetPet({
   variables: { petId },
 })
-// data: Pet — fully typed
-// petId is required,
-// typos don't compile`
+// data is Pet, and leaving out
+// petId is a type error`
 
 const configCode = `// queryfish.config.ts
 import { defineConfig } from 'queryfish'
@@ -66,12 +59,12 @@ export default defineConfig({
 })`
 
 const generatedOutput = `src/api/
-├── types.ts           # Interfaces & types
-├── requests.ts        # Plain async functions
+├── types.ts           # interfaces and types
+├── requests.ts        # plain async functions
 ├── queries.ts         # createQuery hooks
 ├── mutations.ts       # createMutation hooks
-├── infiniteQueries.ts # opt-in infinite queries
-└── index.ts           # Barrel re-export`
+├── infiniteQueries.ts # only if you opt in
+└── index.ts           # re-exports`
 
 export function Landing() {
     return (
@@ -88,32 +81,33 @@ export function Landing() {
                     </div>
 
                     <h1 className='animate-fade-in-up-delay-1 mb-6 text-4xl leading-tight font-extrabold tracking-tight sm:text-6xl lg:text-7xl'>
-                        <span className='text-text-primary'>Hook your API.</span>
+                        <span className='text-text-primary'>React Query hooks,</span>
                         <br />
-                        <span className='gradient-text'>Typed, straight from the spec.</span>
+                        <span className='gradient-text'>generated from your spec.</span>
                     </h1>
 
                     <p className='animate-fade-in-up-delay-2 mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-text-secondary sm:text-xl'>
-                        Turn an OpenAPI document into fully typed{' '}
+                        QueryFish reads your OpenAPI or Swagger file and writes typed{' '}
                         <a
                             href='https://tanstack.com/query'
                             className='text-brand-sky no-underline hover:underline'>
                             React Query
                         </a>{' '}
-                        hooks powered by{' '}
+                        hooks with{' '}
                         <a
                             href='https://github.com/HuolalaTech/react-query-kit'
                             className='text-brand-sky no-underline hover:underline'>
                             react-query-kit
-                        </a>{' '}
-                        — with zero runtime and no hand-written client code.
+                        </a>
+                        , along with the request functions and types behind them. It runs at build time, so nothing
+                        extra ships to your users.
                     </p>
 
                     <div className='animate-fade-in-up-delay-3 mb-8 flex flex-col items-center justify-center gap-4 sm:flex-row'>
                         <Link
                             to='/docs'
                             className='btn-primary'>
-                            Get Started
+                            Get started
                             <span>→</span>
                         </Link>
                         <a
@@ -138,20 +132,20 @@ export function Landing() {
                 </div>
             </section>
 
-            {/* ═══ Code Comparison — Fix #5: more polished UI ═══ */}
+            {/* ═══ Before / after ═══ */}
             <section className='relative py-24'>
                 <div className='mx-auto max-w-5xl px-4 sm:px-6 lg:px-8'>
                     <div className='mb-14 text-center'>
                         <p className='mb-3 text-sm font-semibold uppercase tracking-widest text-brand-sky'>
-                            Before & After
+                            Before and after
                         </p>
                         <h2 className='mb-4 text-3xl font-bold text-text-primary sm:text-4xl'>
-                            From <span className='text-text-muted line-through decoration-text-muted/40'>guesswork</span>{' '}
-                            to <span className='gradient-text'>type safety</span>
+                            Less code to <span className='gradient-text'>keep in sync</span>
                         </h2>
                         <p className='mx-auto max-w-2xl text-text-secondary'>
-                            Stop writing fetch functions, TypeScript types, and React Query hooks by hand. Describe your
-                            API once in OpenAPI — QueryFish generates the rest.
+                            Your OpenAPI spec already describes the API. Without a generator you describe it again in
+                            fetch functions, again in types, and again in query hooks, then update all of them by hand
+                            when the API changes. QueryFish writes those parts from the spec.
                         </p>
                     </div>
 
@@ -162,9 +156,7 @@ export function Landing() {
                                 <div className='flex h-full flex-1 flex-col rounded-xl bg-ocean-900/80'>
                                     <div className='flex items-center gap-2 border-b border-white/5 px-5 py-3'>
                                         <span className='inline-block h-2.5 w-2.5 rounded-full bg-red-400/60' />
-                                        <span className='text-sm font-medium text-red-400/80'>
-                                            Before — manual, untyped
-                                        </span>
+                                        <span className='text-sm font-medium text-red-400/80'>Before: by hand</span>
                                     </div>
                                     <div className='flex flex-1 flex-col justify-between p-5'>
                                         <pre className='overflow-x-auto font-mono text-sm leading-relaxed text-text-secondary'>
@@ -182,7 +174,7 @@ export function Landing() {
                                     <div className='flex items-center gap-2 border-b border-white/5 px-5 py-3'>
                                         <span className='inline-block h-2.5 w-2.5 rounded-full bg-emerald-400/60' />
                                         <span className='text-sm font-medium text-emerald-400/80'>
-                                            After — generated, type-safe
+                                            After: generated
                                         </span>
                                     </div>
                                     <div className='flex flex-1 flex-col justify-between p-5'>
@@ -192,22 +184,6 @@ export function Landing() {
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom stats */}
-                    <div className='mt-10 grid grid-cols-3 gap-4'>
-                        <div className='text-center'>
-                            <p className='text-2xl font-bold text-brand-sky'>0</p>
-                            <p className='text-xs text-text-muted'>Runtime overhead</p>
-                        </div>
-                        <div className='text-center'>
-                            <p className='text-2xl font-bold text-brand-sky'>100%</p>
-                            <p className='text-xs text-text-muted'>Type coverage</p>
-                        </div>
-                        <div className='text-center'>
-                            <p className='text-2xl font-bold text-brand-sky'>1 cmd</p>
-                            <p className='text-xs text-text-muted'>To generate</p>
                         </div>
                     </div>
                 </div>
@@ -221,10 +197,10 @@ export function Landing() {
                     <div className='mb-14 text-center'>
                         <p className='mb-3 text-sm font-semibold uppercase tracking-widest text-brand-sky'>Features</p>
                         <h2 className='mb-4 text-3xl font-bold text-text-primary sm:text-4xl'>
-                            Why <span className='gradient-text'>QueryFish</span>?
+                            What you <span className='gradient-text'>get</span>
                         </h2>
                         <p className='mx-auto max-w-xl text-text-secondary'>
-                            Built for teams who&apos;d rather write features than fetch functions.
+                            A few choices that shape the generated code, and why they were made.
                         </p>
                     </div>
 
@@ -233,7 +209,6 @@ export function Landing() {
                             <div
                                 key={feature.title}
                                 className='glass-card p-6'>
-                                <div className='mb-4 text-3xl'>{feature.icon}</div>
                                 <h3 className='mb-2 text-lg font-semibold text-text-primary'>{feature.title}</h3>
                                 <p className='text-sm leading-relaxed text-text-secondary'>{feature.description}</p>
                             </div>
@@ -249,10 +224,10 @@ export function Landing() {
                 <div className='mx-auto max-w-5xl px-4 sm:px-6 lg:px-8'>
                     <div className='mb-14 text-center'>
                         <p className='mb-3 text-sm font-semibold uppercase tracking-widest text-brand-sky'>
-                            How It Works
+                            How it works
                         </p>
                         <h2 className='mb-4 text-3xl font-bold text-text-primary sm:text-4xl'>
-                            Three steps to <span className='gradient-text'>type-safe hooks</span>
+                            Set it up <span className='gradient-text'>once</span>
                         </h2>
                     </div>
 
@@ -261,17 +236,17 @@ export function Landing() {
                             <Step
                                 number='01'
                                 title='Configure'
-                                description='Point QueryFish at your OpenAPI spec and tell it where your HTTP client lives.'
+                                description='Tell QueryFish where your spec is, where to put the output, and which file exports your HTTP client.'
                             />
                             <Step
                                 number='02'
                                 title='Generate'
-                                description='Run one command. QueryFish reads your spec, builds an IR, and emits readable TypeScript.'
+                                description='Run npx queryfish generate. You get plain TypeScript files that you can read and commit.'
                             />
                             <Step
                                 number='03'
                                 title='Use'
-                                description='Import the generated hooks in your components. Full autocomplete, type-safe variables, smart query keys.'
+                                description='Import the hooks in your components. Variables and responses are typed from the spec, and the query keys are already set.'
                             />
                         </div>
                         <div className='space-y-6'>
@@ -297,22 +272,22 @@ export function Landing() {
                 <div className='hero-mesh' />
                 <div className='relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8'>
                     <h2 className='mb-6 text-3xl font-bold text-text-primary sm:text-4xl'>
-                        Ready to <span className='gradient-text'>stop hand-writing hooks</span>?
+                        Try it on <span className='gradient-text'>your own spec</span>
                     </h2>
                     <p className='mb-10 text-lg text-text-secondary'>
-                        Get started in under a minute. QueryFish is free, open source, and MIT licensed.
+                        Setup takes a few minutes. QueryFish is open source and MIT licensed.
                     </p>
                     <div className='flex flex-col items-center justify-center gap-4 sm:flex-row'>
                         <Link
                             to='/docs'
                             className='btn-primary'>
-                            Read the Docs
+                            Read the docs
                             <span>→</span>
                         </Link>
                         <Link
                             to='/examples'
                             className='btn-secondary'>
-                            See Examples
+                            See the example
                         </Link>
                     </div>
                 </div>

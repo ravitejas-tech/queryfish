@@ -1,11 +1,10 @@
 # Architecture Decision Records
 
-An ADR records a decision that was hard to make and would be expensive to
-reverse — the context it was made in, what was chosen, and what that costs.
+An ADR records a decision that was hard to make and would be expensive to undo: the situation at the time, what we
+chose, and what it costs.
 
-The point is not ceremony. It's that six months from now someone will look at
-`bundle({ dereference: false })` and think "that looks wrong, let me fix it."
-The ADR is how they find out it was deliberate, and what broke last time.
+Here's why we bother. Six months from now, someone will look at `bundle({ dereference: false })` and think "that looks
+wrong, I'll fix it." The ADR is how they find out it was on purpose, and what broke last time.
 
 ## Index
 
@@ -23,29 +22,24 @@ The ADR is how they find out it was deliberate, and what broke last time.
 
 Write an ADR when a choice:
 
-- is expensive to reverse later (public API, generated output shape, the IR),
-- will look wrong to someone who wasn't there,
+- is expensive to undo later (the public API, the shape of generated output, the IR),
+- will look wrong to someone who wasn't around when it was made,
 - was picked over a reasonable alternative, or
-- came from a constraint that isn't visible in the code.
+- comes from a constraint you can't see in the code.
 
-Don't write one for things the code already says plainly. A function name is
-not a decision record.
+Don't write one for things the code already makes obvious. A function name isn't a decision record.
 
-## How to add one
+## Adding one
 
-1. Copy [`template.md`](./template.md) to `NNNN-short-title.md`, incrementing
-   the number.
-2. Fill it in. Be specific about what you gave up — the Consequences section is
-   the part people actually come back for.
+1. Copy [`template.md`](./template.md) to `NNNN-short-title.md`, using the next number.
+2. Fill it in. Be specific about what you gave up. The Consequences section is the part people come back to.
 3. Add a row to the index above.
-4. Reference it from the code where the decision is enforced, e.g.
-   `// See docs/adr/0003-bundle-without-dereferencing.md`.
+4. Link to it from the code where the decision applies, e.g. `// See docs/adr/0003-bundle-without-dereferencing.md`.
 
 ## Changing a decision
 
-Don't edit an accepted ADR's decision — the record of what was believed at the
-time is the value. Instead:
+Don't edit the decision in an accepted ADR. The point is to keep a record of what we thought at the time. Instead:
 
-1. Write a new ADR that supersedes it.
+1. Write a new ADR that replaces it.
 2. Mark the old one `Superseded by [NNNN](./NNNN-….md)`.
 3. Update the index.

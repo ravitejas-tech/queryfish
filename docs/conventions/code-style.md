@@ -1,48 +1,43 @@
-# Code style and contribution rules
+# Code style
 
-Formatting is handled by Prettier and ESLint — run `npm run format` and don't
-think about it. This document covers the rules a linter can't check.
+Prettier and ESLint handle formatting, so run `npm run format` and don't worry about it. This page covers the things a
+linter can't check.
 
 ## Architectural rules
 
-These are load-bearing. A PR that breaks one will be asked to change.
+PRs that break one of these will be asked to change.
 
-### Emitters never read the raw OpenAPI document
+### Emitters only read the IR
 
-Everything in `src/emit/` reads the IR and nothing else. If an emitter needs
-spec data the IR doesn't carry, extend `src/ir/types.ts` and populate it in
-`src/ir/build.ts` first.
+Code in `src/emit/` reads the IR and nothing else. If an emitter needs spec data the IR doesn't carry, add it to
+`src/ir/types.ts` and fill it in from `src/ir/build.ts` first.
 
-Why: it is the boundary that keeps cycle-breaking, naming, and pagination
-solved exactly once. See [ADR 0002](../adr/0002-four-stage-pipeline-with-an-ir.md).
+That boundary is why cycles, naming and pagination only have to be handled in one place. See
+[ADR 0002](../adr/0002-four-stage-pipeline-with-an-ir.md).
 
-### Never guess where OpenAPI is silent
+### Don't infer what the spec doesn't say
 
-If the spec doesn't say it, QueryFish doesn't infer it. Require an explicit
-opt-in instead — config or an `x-queryfish-*` extension.
+If the spec doesn't say something, QueryFish shouldn't guess it. Ask for an explicit opt-in instead, either in the
+config or with an `x-queryfish-*` extension.
 
-Why: wrong guesses in generated code produce runtime bugs in a file the user
-didn't write, and they compile cleanly. See
+A wrong guess ends up as a bug in a file the user didn't write, and it still compiles, so it's hard to spot. See
 [ADR 0005](../adr/0005-opt-in-pagination.md).
 
-### Generated code has no runtime dependency on QueryFish
+### Generated code doesn't depend on QueryFish
 
-Generated output may import only `react-query-kit`,
-`@tanstack/react-query`, and the user's client module. QueryFish is a
-`devDependency` and must stay one. See
-[ADR 0006](../adr/0006-user-supplied-http-client.md).
+Generated output can only import `react-query-kit`, `@tanstack/react-query` and the user's client module. QueryFish is
+a `devDependency` and has to stay one. See [ADR 0006](../adr/0006-user-supplied-http-client.md).
 
-### Generated code should read like a human wrote it
+### Generated code should look hand-written
 
-It gets committed, reviewed, and debugged by people. Prefer a named type over
-an inline expansion, emit JSDoc from spec descriptions, and don't emit `as`
-casts to silence a type error — a cast that hides a real mismatch is a bug
-waiting to surface at a call site.
+People commit it, review it and debug it. Prefer a named type to an inline one, turn spec descriptions into JSDoc, and
+don't add `as` casts to make a type error go away. A cast that hides a real mismatch just moves the error to the user's
+call site.
 
 ## TypeScript
 
-**`strict` is on, including `noUncheckedIndexedAccess`.** Array and index access
-returns `T | undefined`. Handle it rather than asserting it away:
+**`strict` is on, including `noUncheckedIndexedAccess`.** Indexing into an array gives you `T | undefined`. Handle the
+`undefined` instead of asserting it away:
 
 ```ts
 // Prefer
@@ -53,56 +48,52 @@ if (first) throw new SpecError(String(first.message))
 throw new SpecError(String(errors[0]!.message))
 ```
 
-**`any` is allowed only for raw spec data.** The OpenAPI document is untyped by
-nature and `@typescript-eslint/no-explicit-any` is off for that reason. Once
-data crosses into the IR it is fully typed, and `any` there is a review comment.
+**`any` is only for raw spec data.** The OpenAPI document is untyped, which is why `@typescript-eslint/no-explicit-any`
+is turned off. Once data is in the IR it's fully typed, and an `any` there will get flagged in review.
 
-**Prefer `type` imports.** Enforced by ESLint; `npm run lint -- --fix` handles it.
+**Use `type` imports.** ESLint enforces this, and `npm run lint -- --fix` will fix it for you.
 
-**Exported functions get a doc comment** explaining what the caller needs to
-know. Internal helpers only need one if the name isn't enough.
+**Exported functions get a doc comment** saying what a caller needs to know. Internal helpers only need one if the name
+doesn't say enough.
 
 ## Comments
 
-**Comment why, not what.** The code says what.
+**Explain why, not what.** The code already shows what it does.
 
 ```ts
-// Prefer — explains a non-obvious constraint
+// Good: explains something you can't see from the code
 // Path parameters are always required, whatever the spec says.
 required: location === 'path' ? true : parameter['required'] === true,
 
-// Avoid — restates the code
+// Not useful: repeats the code
 // Set required to true if location is path
 ```
 
-**Document surprises where they'll be encountered.** If code looks wrong but
-isn't, say so at the site and link the ADR. `src/loader/load.ts` is the model:
-`dereference: false` looks like an oversight until you read the comment.
+**Leave a note where something looks wrong but isn't.** Put the comment right there, and link the ADR if there is one.
+`src/loader/load.ts` is a good example: `dereference: false` looks like a mistake until you read the comment above it.
 
-**Don't leave commented-out code.** Git remembers.
+**Don't leave commented-out code.** It's in the git history if anyone needs it.
 
 ## Testing
 
-What a change needs before it can merge:
+What each kind of change needs before it can be merged:
 
-| Change                     | Required                                                            |
+| Change                     | Needs                                                               |
 | -------------------------- | ------------------------------------------------------------------- |
 | Bug fix in generation      | A case in `test/fixtures/edge-cases.yaml` that fails before the fix |
-| New emitter                | Snapshot coverage + the compile test must still pass                |
+| New emitter                | Snapshot coverage, and the compile test still passes                |
 | New OpenAPI feature        | Fixture coverage, plus a Swagger 2.0 case if it applies there       |
 | Naming or identifier logic | Unit tests in `test/naming.test.ts`                                 |
-| CLI behaviour              | Exercise it end-to-end; don't only test the internals               |
+| CLI behaviour              | Test it end to end, not only the internals                          |
 
-**Add to `edge-cases.yaml` rather than creating a new fixture.** It is the
-regression suite — a single file where every shape that has ever broken the
-generator lives together. New fixtures fragment that.
+**Add to `edge-cases.yaml` instead of creating a new fixture.** It's the regression suite, and it's useful to have every
+shape that has ever broken the generator in one file.
 
-**Snapshots are a review surface, not a formality.** When `npm test -- -u`
-changes a snapshot, read the diff. If you can't explain why the output changed,
-that's the bug.
+**Read your snapshot diffs.** When `npm test -- -u` changes a snapshot, look at what changed. If you can't explain why
+the output changed, that's probably the bug.
 
-**Assert behaviour, not formatting.** Generated output is formatted with the
-_user's_ Prettier config, so quote style varies. Match either:
+**Test behaviour, not formatting.** Generated output uses the user's Prettier config, so the quote style can vary. Match
+either one:
 
 ```ts
 expect(queries).toMatch(/queryKey: \['pets'\]|queryKey: \["pets"\]/)
@@ -110,7 +101,7 @@ expect(queries).toMatch(/queryKey: \['pets'\]|queryKey: \["pets"\]/)
 
 ## Errors
 
-User-facing errors carry a location and, where possible, a fix:
+Errors shown to users should say where the problem is and, when possible, how to fix it:
 
 ```
 error: cannot resolve schema
@@ -120,25 +111,20 @@ error: cannot resolve schema
   Check that the $ref target exists in components.schemas.
 ```
 
-Use `QueryFishError` / `SpecError` with `file`, `pointer`, and `hint`. A
-generator that fails with a bare stack trace makes the user search thousands of
-lines of YAML by hand.
+Use `QueryFishError` or `SpecError` with `file`, `pointer` and `hint`. A bare stack trace leaves the user searching
+through thousands of lines of YAML.
 
 ## Dependencies
 
-The dependency list is short on purpose, and adding to it needs justification
-in the PR description. Before proposing one, check whether Node's standard
-library or an existing dependency covers it.
+The dependency list is short on purpose. If you want to add one, explain why in the PR, and check first whether Node's
+standard library or an existing dependency already covers it.
 
-Never add a `dependencies` entry that would end up in generated output.
+Never add a dependency that the generated output would need at runtime.
 
 ## Pull requests
 
 - Branch from `main`.
-- Add a changeset (`npx changeset`) for anything user-visible. See
-  [versioning.md](./versioning.md).
-- `npm test`, `npm run typecheck`, `npm run lint`, and `npm run format:check`
-  all pass.
-- Explain _why_ in the description. The diff shows what.
-- Open an issue first for anything large, so the approach can be agreed before
-  you spend the time.
+- Add a changeset (`npx changeset`) for anything users will notice. See [versioning.md](./versioning.md).
+- `npm test`, `npm run typecheck`, `npm run lint` and `npm run format:check` all pass.
+- Explain why in the description. The diff shows what.
+- For anything large, open an issue first so we can agree on the approach before you spend the time.

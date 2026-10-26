@@ -1,28 +1,26 @@
-# QueryFish documentation
+# QueryFish docs
+
+These are mostly for contributors. If you just want to use QueryFish, the main [README](../README.md) or
+[queryfish.dev](https://queryfish.dev) is the better place to start.
 
 ## Start here
 
-- **[architecture.md](./architecture.md)** — how the generator works and why.
-  Read this first if you're contributing.
-- **[../CONTRIBUTING.md](../CONTRIBUTING.md)** — clone to merged PR.
+- [architecture.md](./architecture.md): how the generator works. Read this first if you want to contribute.
+- [CONTRIBUTING.md](../CONTRIBUTING.md): setup, tests and how to send a PR.
 
 ## Decisions
 
-- **[adr/](./adr/)** — Architecture Decision Records. Why things are the way
-  they are, including the alternatives that were rejected. Read the relevant
-  one before changing a decision.
+- [adr/](./adr/): Architecture Decision Records. Each one explains why something works the way it does, and which
+  alternatives were turned down. Read the relevant one before changing that part of the code.
 
 ## Conventions
 
-Rules contributors are expected to follow:
+- [conventions/commits.md](./conventions/commits.md): commit message format, types and scopes.
+- [conventions/code-style.md](./conventions/code-style.md): the rules a linter can't check, comments, and which tests a
+  change needs.
+- [conventions/versioning.md](./conventions/versioning.md): how we pick version bumps. For a code generator, "breaking"
+  means the generated code breaks your app.
 
-- **[conventions/commits.md](./conventions/commits.md)** — Conventional Commits:
-  types, scopes, when a body is needed.
-- **[conventions/code-style.md](./conventions/code-style.md)** — architectural
-  rules, TypeScript style, comment policy, test requirements per change type.
-- **[conventions/versioning.md](./conventions/versioning.md)** — SemVer for a
-  code generator, where "breaking" means _generated output_ breaks user code.
+## Roadmap
 
-## Planning
-
-- **[roadmaps/](./roadmaps/)** — what shipped in each release and what's next.
+- [roadmaps/v1.0.md](./roadmaps/v1.0.md): what shipped in 1.0 and what's planned next.

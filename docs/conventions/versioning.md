@@ -2,83 +2,75 @@
 
 QueryFish follows [Semantic Versioning](https://semver.org/).
 
-## The part that's different for a code generator
+## What's different for a code generator
 
-Most libraries version their **API**. QueryFish has two surfaces, and the
-second one is the one that catches people out:
+Most libraries only have to version their API. QueryFish has two things users depend on:
 
-1. **The tool's API** — the CLI, `defineConfig`, exported functions.
-2. **The generated output** — the code users actually import and call.
+1. **The tool itself**: the CLI, `defineConfig`, and the exported functions.
+2. **The generated code**: the hooks, types and functions users actually import and call.
 
-A change can leave surface 1 untouched and still break every consumer, because
-their application code is written against surface 2. Renaming a generated hook
-is as breaking as renaming an exported function, even though nothing in
-`src/index.ts` changed.
+The second one is easy to forget. A change can leave the CLI and config exactly the same and still break every user,
+because their app is written against the generated code. Renaming a generated hook breaks people just as much as renaming
+an exported function, even though nothing in `src/index.ts` changed.
 
-**The rule: if a user's application code stops compiling or changes behaviour
-after regenerating, it's breaking — regardless of what changed internally.**
+**The rule: if someone regenerates and their app stops compiling or behaves differently, it's a breaking change, no
+matter what changed internally.**
 
 ## What each bump means
 
-### Major — user code breaks after regenerating
+### Major: user code breaks after regenerating
 
-- Generated hook, type, or request function names change
-- Query key shape changes (invalidation calls silently stop matching)
+- Names of generated hooks, types or request functions change
+- The shape of query keys changes (invalidation calls quietly stop matching)
 - The variables or response type of a generated hook changes shape
-- The `QueryFishClient` interface gains a required member
-- A config option is removed or its meaning changes
-- The minimum supported Node or TypeScript version rises
-- Output that previously compiled no longer does
+- The `QueryFishClient` interface gets a new required member
+- A config option is removed or starts meaning something else
+- The minimum supported Node or TypeScript version goes up
+- Output that used to compile doesn't any more
 
-Query keys deserve emphasis: changing them breaks
-`invalidateQueries({ queryKey: [...] })` calls **at runtime, without a type
-error**. Treat any key change as major. See
+Query keys need extra care. If they change, `invalidateQueries({ queryKey: [...] })` calls stop matching at runtime and
+there's no type error to warn anyone. Treat any key change as major. See
 [ADR 0004](../adr/0004-path-segment-query-keys.md).
 
-### Minor — new capability, existing output unaffected
+### Minor: something new, existing output unaffected
 
 - A new emitter or output file
-- A new config option with a backwards-compatible default
-- Support for OpenAPI constructs that previously generated `unknown`
+- A new config option whose default keeps the old behaviour
+- Support for OpenAPI features that used to come out as `unknown`
 - New CLI flags
-- Better generated JSDoc, or types that become _more_ specific in a way that
-  cannot break a caller
+- Better JSDoc, or types that get more specific in a way that can't break a caller
 
-### Patch — fixes and cosmetics
+### Patch: fixes
 
-- Generated code that was invalid TypeScript now compiles
-- Bug fixes in schema conversion, naming, or resolution
-- Whitespace and formatting changes in output
-- Error message improvements
+- Generated code that didn't compile now does
+- Bug fixes in schema conversion, naming or `$ref` resolution
+- Whitespace and formatting changes in the output
+- Better error messages
 - Documentation
 
-## The grey area: fixing wrong output
+## Fixing wrong output
 
-A fix that makes wrong output correct can still break someone who worked around
-the bug. Judgement call:
+Fixing output that was wrong can still break someone who worked around the bug. Use your judgement:
 
-- **Output was invalid TypeScript** (didn't compile) → patch. Nobody could
-  depend on it.
-- **Output compiled but was wrong at runtime** → patch, called out clearly in
-  the changeset. Users hitting it were already broken.
-- **Output compiled and worked, but was suboptimal** → minor at least; major if
-  names or keys change.
+- **The output didn't compile** → patch. Nobody could have depended on it.
+- **The output compiled but was wrong at runtime** → patch, and say so clearly in the changeset. Anyone hitting it was
+  already broken.
+- **The output worked but wasn't ideal** → at least minor, and major if names or keys change.
 
-When genuinely torn, pick the larger bump. A surprise major is an annoyance; a
-surprise break is a bug report.
+If you can't decide, go with the bigger bump. An unexpected major version is a small annoyance. An unexpected break turns
+into a bug report.
 
 ## Changesets
 
-Releases run on [Changesets](https://github.com/changesets/changesets).
+Releases are managed with [Changesets](https://github.com/changesets/changesets).
 
-Add one for any user-visible change:
+Add one for any change users will notice:
 
 ```bash
 npx changeset
 ```
 
-Pick the bump, then write the entry **for a user reading the changelog**, not
-for a reviewer reading the diff:
+Pick the bump, then write the entry for someone reading the changelog, not for the person reviewing your PR:
 
 ```md
 ---
@@ -89,14 +81,15 @@ Fix `$ref` resolution inside `allOf` members. Components referenced from within
 a composition schema now emit the named type instead of `unknown`.
 ```
 
-Skip the changeset for changes with no user-visible effect — internal
-refactors, tests, CI, repo docs. CI does not require one, because requiring it
-trains people to add empty ones.
+Changes users won't notice (internal refactors, tests, CI) don't need a changeset, and CI doesn't require one. If it
+did, people would just start adding empty ones.
+
+One exception: the README is published to npm, and npm only picks up README changes when a new version is released. If
+you want a README fix to show up on npm, add a patch changeset for it.
 
 ### Breaking changes
 
-Say what breaks and how to fix it. This text is what users see when deciding
-whether to upgrade:
+Say what breaks and how to fix it. People read this when they're deciding whether to upgrade:
 
 ```md
 ---
@@ -116,22 +109,15 @@ In exchange, a prefix now invalidates a whole resource tree:
 `{ queryKey: ['pets'] }` clears every pet query.
 ```
 
-## Release process
+## How releases happen
 
-Fully automated by `.github/workflows/release.yml`:
+`.github/workflows/release.yml` does it all:
 
-1. PRs merge to `main` with changesets attached.
-2. The workflow opens (or updates) a **Version Packages** PR that applies the
-   pending bumps and writes `CHANGELOG.md`.
+1. PRs with changesets get merged into `main`.
+2. The workflow opens (or updates) a **Version Packages** PR that applies the pending bumps and updates `CHANGELOG.md`.
 3. Merging that PR publishes to npm with provenance and tags the release.
 
-Nobody runs `npm publish` by hand, and nobody edits `version` in
-`package.json` directly.
+Nobody runs `npm publish` by hand, and nobody edits `version` in `package.json` directly.
 
-### 0.x
-
-While the major version is 0, breaking changes go out as **minor** bumps, per
-SemVer. The rules above still apply — a breaking change is still identified and
-documented as breaking, it just lands in `0.x` rather than forcing `1.0.0`.
-
-`1.0.0` is for when the generated output shape is stable enough to promise.
+Since 1.0.0, the generated output is considered stable, so everything above applies as written: breaking changes mean a
+new major version.

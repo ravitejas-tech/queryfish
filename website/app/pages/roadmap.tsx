@@ -2,46 +2,46 @@ import { Link } from 'react-router'
 
 const completed = [
     {
-        title: 'createQuery and createMutation factories',
-        description: 'Generate type-safe query and mutation hooks from GET, POST, PUT, PATCH, DELETE operations.',
+        title: 'Query and mutation hooks',
+        description: 'createQuery hooks for GET and HEAD, createMutation hooks for POST, PUT, PATCH and DELETE.',
     },
     {
-        title: 'createInfiniteQuery (opt-in)',
-        description: 'Infinite scroll / pagination hooks with explicit opt-in — no guessing.',
+        title: 'Infinite queries (opt-in)',
+        description: 'createInfiniteQuery hooks for the endpoints you mark as paginated, in the config or in the spec.',
     },
     {
-        title: 'Custom axios / fetch client support',
-        description: 'Bring your own HTTP client. QueryFish generates the glue code.',
+        title: 'Bring your own HTTP client',
+        description: 'Generated requests call a client you export, so axios, fetch, ky or your own wrapper all work.',
     },
     {
         title: 'Watch mode',
-        description: 'Change your spec, see regenerated hooks instantly.',
+        description: 'Regenerates when the spec or config file changes.',
     },
     {
-        title: 'OpenAPI 3.0, 3.1, and Swagger 2.0',
-        description: 'Full support for all major spec versions.',
+        title: 'OpenAPI 3.0, 3.1 and Swagger 2.0',
+        description: 'Specs are loaded with Redocly, which reads all three versions.',
     },
 ]
 
 const upcoming = [
     {
-        title: 'Zod schema generation',
-        description: 'Runtime validation schemas generated alongside your types for full stack type safety.',
+        title: 'Zod schemas',
+        description: 'Generate Zod schemas next to the TypeScript types, so responses can be validated at runtime.',
         tag: 'Up Next',
     },
     {
-        title: 'MSW mock handler generation',
-        description: 'Auto-generate Mock Service Worker handlers from your spec for testing.',
+        title: 'MSW handlers',
+        description: 'Generate Mock Service Worker handlers from the spec, for tests and local development.',
         tag: 'Planned',
     },
     {
-        title: 'Suspense query variants',
-        description: 'useSuspenseQuery wrappers for React Suspense-first architectures.',
+        title: 'Suspense hooks',
+        description: 'createSuspenseQuery variants for apps that use Suspense for loading states.',
         tag: 'Planned',
     },
     {
-        title: 'Plugin system',
-        description: 'Custom emitters and output formats via a plugin API.',
+        title: 'Plugins',
+        description: 'A way to add your own output files without forking the generator.',
         tag: 'Exploring',
     },
 ]
@@ -53,16 +53,16 @@ export function RoadmapPage() {
                 <div className='mb-16'>
                     <h1 className='mb-4 text-4xl font-extrabold text-text-primary'>Roadmap</h1>
                     <p className='max-w-2xl text-lg text-text-secondary'>
-                        What&apos;s shipped, what&apos;s next, and where we&apos;re headed. Have a use case that
-                        doesn&apos;t fit?{' '}
+                        What&apos;s in 1.0 and what&apos;s planned next. If you need something that isn&apos;t listed
+                        here,{' '}
                         <a
                             href='https://github.com/ravitejas-tech/queryfish/issues'
                             target='_blank'
                             rel='noopener noreferrer'
                             className='text-accent-400 no-underline hover:underline'>
-                            Open an issue
-                        </a>{' '}
-                        — scope decisions are made in the open.
+                            open an issue
+                        </a>
+                        .
                     </p>
                 </div>
 
@@ -74,7 +74,7 @@ export function RoadmapPage() {
                         </div>
                         <h2 className='text-2xl font-bold text-text-primary'>Shipped</h2>
                         <span className='rounded-full bg-emerald-500/10 px-3 py-0.5 text-xs font-medium text-emerald-400'>
-                            v0.1
+                            v1.0
                         </span>
                     </div>
 
@@ -109,7 +109,7 @@ export function RoadmapPage() {
                         <div className='flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/10'>
                             <span className='text-accent-400'>◇</span>
                         </div>
-                        <h2 className='text-2xl font-bold text-text-primary'>Coming Up</h2>
+                        <h2 className='text-2xl font-bold text-text-primary'>Next</h2>
                     </div>
 
                     <div className='space-y-1'>
@@ -142,20 +142,20 @@ export function RoadmapPage() {
                 {/* CTA */}
                 <div className='mt-20 text-center'>
                     <div className='glass-card inline-block px-8 py-6'>
-                        <p className='mb-4 text-text-secondary'>Want to contribute to the roadmap?</p>
+                        <p className='mb-4 text-text-secondary'>Have an idea, or a spec that doesn&apos;t work?</p>
                         <div className='flex flex-col items-center gap-3 sm:flex-row'>
                             <a
                                 href='https://github.com/ravitejas-tech/queryfish/issues'
                                 target='_blank'
                                 rel='noopener noreferrer'
                                 className='btn-primary'>
-                                Open an Issue
+                                Open an issue
                                 <span>→</span>
                             </a>
                             <Link
                                 to='/docs'
                                 className='btn-secondary'>
-                                Read the Docs
+                                Read the docs
                             </Link>
                         </div>
                     </div>

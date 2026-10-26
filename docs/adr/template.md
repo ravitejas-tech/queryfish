@@ -5,19 +5,17 @@
 
 ## Context
 
-What forces are at play? What constraint, requirement, or discovery made this a
-decision rather than an obvious default? Include the evidence — a failing test,
-a library signature, a spec that broke something.
+What made this a decision instead of an obvious default? A constraint, a requirement, something you found out the hard
+way? Include the evidence: a failing test, a library signature, a spec that broke something.
 
 ## Decision
 
-What we chose, stated plainly and in the active voice: "QueryFish bundles specs
-without dereferencing."
+What we chose, said plainly: "QueryFish bundles specs without dereferencing."
 
 ## Consequences
 
-What this buys, and what it costs. Be honest about the cost — an ADR with no
-downsides usually means the alternatives weren't taken seriously.
+What this gets us, and what it costs. Be honest about the costs. If there are no downsides, the alternatives probably
+weren't taken seriously.
 
 ### What this enables
 
@@ -25,5 +23,5 @@ downsides usually means the alternatives weren't taken seriously.
 
 ### What we rejected
 
-The alternatives considered, and why each lost. This is the section that stops
-someone re-proposing a dead end.
+The alternatives we considered, and why each one lost. This section is what stops someone from proposing the same dead
+end again.

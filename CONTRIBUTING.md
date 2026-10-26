@@ -1,7 +1,7 @@
 # Contributing to QueryFish
 
-Thanks for being here. This guide should get you from clone to merged PR without
-having to ask anyone anything — if it doesn't, that's a bug worth reporting.
+Thanks for taking a look. This guide should be enough to get from a fresh clone to a merged PR. If something's missing
+or unclear, please open an issue about that too.
 
 ## Getting started
 
@@ -12,133 +12,116 @@ npm install
 npm test
 ```
 
-Node 20.19+ is required. That's it — there is no build step needed for
-development, and no external services.
+You need Node 20.19 or newer. There's no build step for development and nothing external to set up.
 
-Useful scripts:
+Scripts you'll use:
 
 | Command              | What it does                |
 | -------------------- | --------------------------- |
-| `npm test`           | Run the full suite          |
+| `npm test`           | Run all tests               |
 | `npm run test:watch` | Re-run tests as you edit    |
 | `npm run typecheck`  | Type-check without emitting |
-| `npm run build`      | Build the distributable     |
+| `npm run build`      | Build the package           |
 | `npm run lint`       | Lint                        |
 | `npm run format`     | Format with Prettier        |
 
-## How the codebase is laid out
+## How the code is laid out
 
-Read [docs/architecture.md](./docs/architecture.md) first — it explains the
-four-stage pipeline and, more importantly, _why_ it is built that way. The short
+[docs/architecture.md](./docs/architecture.md) explains the four-stage pipeline and why it's built that way. The short
 version:
 
 ```
-loader/  spec → self-contained document ($refs preserved)
-ir/      document → normalized Operation[] + named types
+loader/  spec → one bundled document ($refs kept)
+ir/      document → Operation[] + named types
 emit/    IR → TypeScript source strings
-         (writer in generate.ts formats + diffs + writes)
+         (generate.ts then formats, diffs and writes)
 ```
 
-The rule that keeps things simple: **emitters never touch the raw OpenAPI
-document.** If an emitter needs something the IR doesn't carry, extend the IR.
+The one rule to remember: **emitters never read the raw OpenAPI document.** If an emitter needs something the IR doesn't
+have, add it to the IR.
 
 ## Tests
 
-Three kinds, and they catch different things:
+There are three kinds, and they catch different problems:
 
-- **Unit tests** (`test/naming.test.ts`) — identifier derivation and collision
-  rules. Cheap and precise.
-- **Snapshot tests** (`test/generate.test.ts`) — full generated output for each
-  fixture, committed to the repo. When you change an emitter, the diff in your PR
-  _is_ the output change. That is intentional: reviewers should see exactly what
-  users will get. Update them with `npm test -- -u` and read the diff before
-  committing it.
-- **Compile tests** (`test/compile.test.ts`) — generates each fixture to a temp
-  directory and runs `tsc` over it against the real `react-query-kit`. Snapshots
-  prove the output didn't _change_; only this proves it _compiles_. For a code
-  generator, this is the test that matters most.
+- **Unit tests** (`test/naming.test.ts`) cover how identifiers are derived and how collisions are resolved.
+- **Snapshot tests** (`test/generate.test.ts`) store the full generated output for each fixture in the repo. When you
+  change an emitter, the snapshot diff in your PR shows exactly what users will get, which is what reviewers look at.
+  Update them with `npm test -- -u`, and read the diff before you commit it.
+- **Compile tests** (`test/compile.test.ts`) generate each fixture into a temp folder and run `tsc` over it against the
+  real `react-query-kit`. Snapshots only show that the output didn't change. These show that it compiles, which for a
+  code generator is the more important of the two.
 
-### The fixtures
+### Fixtures
 
-- `petstore.yaml` — realistic, covers the common cases.
-- `edge-cases.yaml` — everything that has historically broken generators:
-  circular `$ref`s, missing and duplicate `operationId`s, reserved words,
-  `allOf`/`oneOf`, 204 responses, parameter names that aren't valid identifiers.
+- `petstore.yaml` is a realistic spec covering the common cases.
+- `edge-cases.yaml` collects the things that tend to break generators: circular `$ref`s, missing and duplicate
+  `operationId`s, reserved words, `allOf`/`oneOf`, 204 responses, and parameter names that aren't valid identifiers.
   **If you fix a bug, add a case here.**
-- `swagger2.json` — Swagger 2.0, which differs enough to be worth covering.
+- `swagger2.json` is a Swagger 2.0 spec, which is different enough to need its own fixture.
 
-## Common contributions
+## Common changes
 
-### Adding a new emitter
+### Adding an emitter
 
-The most likely kind of contribution (Zod schemas, MSW handlers, …):
+This is the most likely contribution (Zod schemas, MSW handlers and so on):
 
 1. Add `src/emit/<name>.ts` exporting `(ir, config) => string`.
 2. Register it in `src/generate.ts`.
-3. Add a config flag in `src/config/define.ts` if it should be optional.
+3. If it should be optional, add a config flag in `src/config/define.ts`.
 4. Run `npm test -- -u` and commit the snapshot.
 
 ### Fixing a generation bug
 
-1. Add the failing shape to `test/fixtures/edge-cases.yaml`.
-2. Confirm it fails.
+1. Add the spec shape that breaks to `test/fixtures/edge-cases.yaml`.
+2. Check that the tests fail.
 3. Fix it in `ir/` or `emit/`.
-4. `npm test -- -u`, review the snapshot diff, commit.
+4. Run `npm test -- -u`, read the snapshot diff, and commit.
 
-### Adding OpenAPI feature support
+### Supporting more of OpenAPI
 
-Most of this lives in `src/ir/schema.ts` (schema shapes) or `src/ir/build.ts`
-(operation-level concerns). Check whether the IR can already express what you
-need before adding to it.
+Most of this lives in `src/ir/schema.ts` (schema shapes) or `src/ir/build.ts` (anything at the operation level). Check
+whether the IR can already express what you need before adding to it.
 
 ## Conventions
 
-Three short documents cover the rules. Skim them before your first PR:
+There are three short docs. Have a quick look before your first PR:
 
-- **[Commit convention](./docs/conventions/commits.md)** — Conventional Commits,
-  with scopes matching the pipeline stages.
-- **[Code style](./docs/conventions/code-style.md)** — architectural rules,
-  comment policy, and what tests each kind of change needs.
-- **[Versioning](./docs/conventions/versioning.md)** — SemVer for a code
-  generator, where "breaking" means _generated output_ breaks user code.
+- [Commits](./docs/conventions/commits.md): Conventional Commits, with scopes that match the pipeline stages.
+- [Code style](./docs/conventions/code-style.md): the architectural rules, how we write comments, and which tests each
+  kind of change needs.
+- [Versioning](./docs/conventions/versioning.md): how to pick a version bump. For a code generator, "breaking" means the
+  generated code breaks someone's app.
 
-Decisions with lasting consequences are recorded as
-[ADRs](./docs/adr/). If you're about to change something that looks wrong,
-check there first — it may be deliberate, and the reasoning (plus the
-alternatives already rejected) will be written down.
+Bigger decisions are written up as [ADRs](./docs/adr/). If something looks wrong and you're about to change it, check
+there first. It might be on purpose, and the reasons (and the alternatives already tried) will be written down.
 
 ## Pull requests
 
 - Branch from `main`.
 - Follow the [commit convention](./docs/conventions/commits.md).
-- Add a changeset: `npx changeset` — see
-  [versioning](./docs/conventions/versioning.md) for choosing the bump.
-- Make sure `npm test`, `npm run typecheck`, `npm run lint`, and
-  `npm run format:check` pass.
-- Explain _why_ in the description, not just what. The diff shows what.
+- Add a changeset with `npx changeset`. [Versioning](./docs/conventions/versioning.md) explains which bump to pick.
+- Make sure `npm test`, `npm run typecheck`, `npm run lint` and `npm run format:check` pass.
+- In the description, explain why you made the change. The diff already shows what changed.
 
-Small PRs get reviewed faster. If you're planning something large, open an issue
-first so we can agree on the approach before you spend the time.
+Small PRs get reviewed faster. If you're planning something big, open an issue first so we can agree on the approach
+before you put the time in.
 
 ## Design principles
 
-Worth knowing before proposing changes, because these shape what gets accepted:
+These shape what gets merged, so they're worth knowing before you propose something:
 
-1. **Zero runtime.** Generated code depends on `react-query-kit`,
-   `@tanstack/react-query`, and the user's own client module. Nothing else.
-   QueryFish must never need to be installed at runtime.
+1. **No runtime.** Generated code depends on `react-query-kit`, `@tanstack/react-query` and the user's own client
+   module, and nothing else. QueryFish itself should never need to be installed in production.
    ([ADR 0006](./docs/adr/0006-user-supplied-http-client.md))
-2. **Never guess.** Where OpenAPI has no standard (pagination being the notable
-   case), QueryFish requires an explicit opt-in rather than inferring. A wrong
-   guess that compiles is worse than no feature — it fails silently at runtime.
+2. **Don't guess.** Where OpenAPI has no standard (pagination is the big one), QueryFish asks for an explicit opt-in
+   instead of inferring. A wrong guess still compiles, so nobody finds out until it misbehaves at runtime.
    ([ADR 0005](./docs/adr/0005-opt-in-pagination.md))
-3. **Generated code should read like a human wrote it.** It gets committed,
-   reviewed, and debugged by real people.
-4. **Generated code is verified to compile**, not assumed to. Snapshots prove
-   output didn't change; only the compiler proves it builds.
+3. **Generated code should look hand-written.** People commit it, review it and debug it.
+4. **Generated code has to compile.** The compile tests check this on every run.
    ([ADR 0007](./docs/adr/0007-verify-generated-code-compiles.md))
-5. **Errors name the location.** A generator that fails with a stack trace makes
-   the user hunt through thousands of lines of YAML.
+5. **Errors say where.** If the generator fails with a bare stack trace, the user has to dig through thousands of lines
+   of YAML to find the problem.
 
 ## Code of conduct
 

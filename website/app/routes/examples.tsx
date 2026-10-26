@@ -4,7 +4,7 @@ import { ExamplesPage } from '../pages/examples'
 export function meta({}: Route.MetaArgs) {
     const title = 'Examples — QueryFish'
     const description =
-        'Interactive code examples demonstrating QueryFish-generated React Query hooks with Axios and Fetch using the OpenAPI Petstore spec.'
+        'A walk through the petstore-react example: a small React app that uses hooks QueryFish generated from a Petstore OpenAPI spec.'
     const url = 'https://queryfish.dev/examples'
     const image = 'https://queryfish.dev/logo.png'
 
